@@ -9,3 +9,7 @@ dependencies:
     version: 0.2.0
   igrr/libnmea: ^0.2.1
   espressif/led_strip: ^3.0.1
+  achimpieters/esp32-dht: ^1.0.2
+  espressif/bh1750: ^1.0.3
+  espressif/json_generator: ^1.1.2
+  espressif/button: ^4.1.3

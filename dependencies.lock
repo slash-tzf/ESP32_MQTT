@@ -1,4 +1,47 @@
 dependencies:
+  achimpieters/esp32-dht:
+    component_hash: e605fcdad07d9d9ad63fe14585b14bee8b4b6c7862247bf590cae44226f8e09c
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32s2
+    - esp32s3
+    version: 1.0.2
+  espressif/bh1750:
+    component_hash: c8cae6dca70fd5fdf5943ae37efbbea6cc41bcb784506e61ea301b3e94dce74b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.3
+  espressif/button:
+    component_hash: f53face2ab21fa0ffaf4cf0f6e513d393f56df6586bb2ad1146120f03f19ee05
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 4.1.3
   espressif/cmake_utilities:
     component_hash: 6983933aa165d5c1bd8ff3716f8873b4dd8577020d9176d22d8568b139ff8753
     dependencies:
@@ -78,6 +121,13 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.1.0
+  espressif/json_generator:
+    component_hash: 45033e1c199b13f1c8c1b544fb7d4e2df6a8e3071ebdcb1b22582b61a7974ff2
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.2
   espressif/json_parser:
     component_hash: d74b81729ad06ec11ff5eb5b1b0d7df1d00e6027fc11471f4b139c70dcf1b1e4
     dependencies:
@@ -130,13 +180,17 @@ dependencies:
       type: service
     version: 0.2.1
 direct_dependencies:
+- achimpieters/esp32-dht
+- espressif/bh1750
+- espressif/button
 - espressif/cmake_utilities
 - espressif/iot_usbh_modem
+- espressif/json_generator
 - espressif/json_parser
 - espressif/led_indicator
 - espressif/led_strip
 - idf
 - igrr/libnmea
-manifest_hash: fe1da3ee110fb1bf034564f50fe6e364b972f44d941c5a5b5a1b4d4e835c69b4
+manifest_hash: b49ac0adb95c4c0092f22d932389565df4a0d958e2e9a4a9c02d878829f2f9cf
 target: esp32s3
 version: 2.0.0

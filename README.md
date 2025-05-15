@@ -249,3 +249,80 @@ Enable the `4G Modem Configuration -> Dump system task status` option in `menuco
 
 > **4G Cat.1 theoretical peak download rate is 10 Mbps, peak upload rate is 5 Mbps**
 > The actual communication rate is affected by the operator's network, test software, Wi-Fi interference, and the number of terminal connections, etc.
+
+# ESP32-S3-A-SIM7670X-4G-HAT示例
+
+这个示例展示了如何使用ESP32-S3-A-SIM7670X-4G-HAT模块收集传感器数据并通过MQTT协议上传到云服务器。
+
+## 功能特点
+
+- 使用BH1750传感器测量光照强度
+- 使用DHT11传感器测量温湿度
+- 使用SIM7670X模块的GNSS功能获取位置信息（支持GPS和基站定位）
+- 使用SIM7670X模块建立4G网络连接
+- 使用MQTT协议上传传感器和位置数据到云服务器
+- 数据以标准JSON格式发送，便于云端处理
+
+## 数据模型
+
+系统采用统一的数据模型，包含以下信息：
+
+```json
+{
+  "device": {
+    "id": "ESP32S3_XXXXXX",
+    "version": "1.0.0"
+  },
+  "timestamp": 1234567890,
+  "sensors": {
+    "temperature": 25.5,
+    "humidity": 60.0,
+    "light": 120.5
+  },
+  "gps": {
+    "latitude": 39.123456,
+    "longitude": 116.654321,
+    "lat_display": "39.123456N",
+    "lon_display": "116.654321E",
+    "altitude": 50.0,
+    "speed": 0.0,
+    "course": 0.0,
+    "source": 0  // 0=GNSS, 1=LBS
+  }
+}
+```
+
+## MQTT主题
+
+- 完整数据：`esp32/data`
+- 仅传感器数据：`esp32/data/sensors`
+- 仅GPS数据：`esp32/data/gps`
+
+## 配置说明
+
+您可以通过`menuconfig`配置以下参数：
+
+- MQTT服务器地址、用户名和密码
+- MQTT主题名称
+- 传感器GPIO引脚映射
+- GPS串口配置
+
+## 编译和烧录
+
+```bash
+idf.py menuconfig    # 配置项目
+idf.py build         # 编译项目
+idf.py flash         # 烧录到ESP32-S3
+```
+
+## 硬件连接
+
+- BH1750: SCL连接到GPIO41, SDA连接到GPIO42
+- DHT11: 数据引脚连接到GPIO7
+- SIM7670X模块通过独立的USB接口与ESP32-S3连接
+
+## 注意事项
+
+- 请确保您的SIM卡已激活，并有足够的流量
+- GPS定位可能需要在室外环境才能获取更好的信号
+- 在使用基站定位时，精度可能低于GPS定位

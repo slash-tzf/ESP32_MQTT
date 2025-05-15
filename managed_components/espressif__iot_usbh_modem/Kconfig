@@ -2,7 +2,7 @@ menu "IoT USB Host Modem"
 
     choice MODEM_TARGET
         prompt "Choose Modem Board"
-        default MODEM_TARGET_ML302_DNLM
+        default MODEM_TARGET_USER
 
         config MODEM_TARGET_ML302_DNLM
             bool "ML302-DNLM/CNLM"
@@ -42,8 +42,8 @@ menu "IoT USB Host Modem"
     config MODEM_SUPPORT_SECONDARY_AT_PORT
         bool "Enable Dual CDC Mode"
         depends on (MODEM_TARGET_MC610_EU || MODEM_TARGET_USER)
-        default y if MODEM_TARGET_MC610_EU
-        default n if MODEM_TARGET_USER
+        default n if MODEM_TARGET_MC610_EU
+        default y if MODEM_TARGET_USER
 
     menu "USB CDC endpoint address config"
         visible if MODEM_TARGET_USER
@@ -59,7 +59,7 @@ menu "IoT USB Host Modem"
             default 0x03 if MODEM_TARGET_BG95_M3
             default 0x04 if MODEM_TARGET_BG96_MA
             default 0x07 if MODEM_TARGET_MC610_EU
-            default 0x01 if MODEM_TARGET_USER
+            default 0x04 if MODEM_TARGET_USER
             range 0x01 0x7f
             help
                 USB OUT endpoint address (eg.0x01) used for send AT/data to device
@@ -75,21 +75,21 @@ menu "IoT USB Host Modem"
             default 0x84 if MODEM_TARGET_BG95_M3
             default 0x86 if MODEM_TARGET_BG96_MA
             default 0x87 if MODEM_TARGET_MC610_EU
-            default 0x81 if MODEM_TARGET_USER
+            default 0x88 if MODEM_TARGET_USER
             range 0x81 0x8f
             help
                 USB IN endpoint address (eg.0x81) used for recive data from device
         config MODEM_USB_OUT2_EP_ADDR
             depends on MODEM_SUPPORT_SECONDARY_AT_PORT
             hex "Modem USB CDC2 OUT endpoint address (AT Only)"
-            default 0x06 if MODEM_TARGET_MC610_EU
+            default 0x02 if MODEM_TARGET_USER
             range 0x01 0x7f
             help
                 USB OUT endpoint address (eg.0x01) used for send AT to device
         config MODEM_USB_IN2_EP_ADDR
             depends on MODEM_SUPPORT_SECONDARY_AT_PORT
             hex "Modem USB CDC2 IN endpoint address (AT Only)"
-            default 0x86 if MODEM_TARGET_MC610_EU
+            default 0x84 if MODEM_TARGET_USER
             range 0x81 0x8f
             help
                 USB IN endpoint address (eg.0x81) used for recive AT from device
@@ -103,23 +103,23 @@ menu "IoT USB Host Modem"
 
     config MODEM_PPP_APN
         string "Set Modem APN"
-        default "internet"
+        default ""
         help
             Set APN (Access Point Name), a logical name to choose data network
 
     config MODEM_SIM_PIN_PWD
         string "Set SIM PIN"
-        default "1234"
+        default ""
         help 
             Set Pin of sim card if have
 
     menu "GPIO Config"
         config MODEM_POWER_GPIO
             int "Modem power control gpio, set 0 if not use"
-            default 12
+            default 0
         config MODEM_RESET_GPIO
             int "Modem reset control gpio, set 0 if not use"
-            default 13
+            default 33
         config MODEM_POWER_GPIO_INACTIVE_LEVEL
             int "Power control gpio inactive level"
             range 0 1

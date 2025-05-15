@@ -1,10 +1,21 @@
+#include <string.h>
 #include "mqtt_client.h"
 #include "mqtt.h"
 #include "esp_log.h"
-
+#include "json_wrapper.h"
 
 static const char *TAG = "MQTT";
 
+#define MQTT_BROKER_URI         CONFIG_MQTT_BROKER_URI
+#define MQTT_BROKER_USERNAME    CONFIG_MQTT_BROKER_USERNAME
+#define MQTT_BROKER_PASSWORD    CONFIG_MQTT_BROKER_PASSWORD
+#define MQTT_SUBSCRIBE_TOPIC    CONFIG_MQTT_SUBSCRIBE_TOPIC
+#define MQTT_PUBLISH_TOPIC      CONFIG_MQTT_PUBLISH_TOPIC
+#define MQTT_PUBLISH_DATA_TOPIC CONFIG_MQTT_DATA_TOPIC
+
+#define JSON_BUFFER_SIZE        2048
+
+static esp_mqtt_client_handle_t s_mqtt_client = NULL;
 
 static void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -32,17 +43,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
+        msg_id = esp_mqtt_client_subscribe(client, MQTT_SUBSCRIBE_TOPIC, 0);
         ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-        ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -50,7 +52,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        msg_id = esp_mqtt_client_publish(client, "/topic/qos0", "data", 0, 0, 0);
+        msg_id = esp_mqtt_client_publish(client, MQTT_PUBLISH_TOPIC, "test", 0, 0, 0);
         ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
@@ -71,7 +73,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
-
         }
         break;
     default:
@@ -80,18 +81,127 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-void mqtt_app_start(void)
+esp_mqtt_client_handle_t mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = "mqtt://116.62.62.70",
-        .credentials.username = "admin",
-        .credentials.authentication.password = "killing007",
-        .session.protocol_ver = MQTT_PROTOCOL_V_5,
+        .broker.address.uri = MQTT_BROKER_URI,
+        .credentials.username = MQTT_BROKER_USERNAME,
+        .credentials.authentication.password = MQTT_BROKER_PASSWORD,
+        //.session.protocol_ver = MQTT_PROTOCOL_V_5,
         // .credentials.client_id = "ESP32-bupt",
     };
 
-    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(client);
+    esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_start(s_mqtt_client);
+    
+    return s_mqtt_client;
+}
+
+esp_err_t mqtt_publish_data_model(esp_mqtt_client_handle_t client, 
+                                 const data_model_t *model, 
+                                 const char *topic)
+{
+    if (client == NULL || model == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // 使用默认主题如果未指定
+    if (topic == NULL) {
+        topic = MQTT_PUBLISH_DATA_TOPIC;
+    }
+    
+    // 创建JSON字符串缓冲区
+    char json_buffer[JSON_BUFFER_SIZE];
+    
+    // 将数据模型转换为JSON
+    esp_err_t ret = json_generate_from_data_model(model, json_buffer, JSON_BUFFER_SIZE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "生成JSON数据失败: %d", ret);
+        return ret;
+    }
+    
+    // 发布到MQTT
+    int msg_id = esp_mqtt_client_publish(client, topic, json_buffer, strlen(json_buffer), 1, 0);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "发布数据失败");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "发布数据成功，msg_id=%d", msg_id);
+    return ESP_OK;
+}
+
+esp_err_t mqtt_publish_sensor_data(esp_mqtt_client_handle_t client, 
+                                  const sensor_data_t *sensor_data, 
+                                  const char *topic)
+{
+    if (client == NULL || sensor_data == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // 使用默认主题如果未指定
+    if (topic == NULL) {
+        topic = MQTT_PUBLISH_DATA_TOPIC "/sensors";
+    }
+    
+    // 创建JSON字符串缓冲区
+    char json_buffer[JSON_BUFFER_SIZE];
+    
+    // 将传感器数据转换为JSON
+    esp_err_t ret = json_generate_from_sensor_data(sensor_data, json_buffer, JSON_BUFFER_SIZE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "生成传感器JSON数据失败: %d", ret);
+        return ret;
+    }
+    
+    // 发布到MQTT
+    int msg_id = esp_mqtt_client_publish(client, topic, json_buffer, strlen(json_buffer), 1, 0);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "发布传感器数据失败");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "发布传感器数据成功，msg_id=%d", msg_id);
+    return ESP_OK;
+}
+
+esp_err_t mqtt_publish_gps_data(esp_mqtt_client_handle_t client, 
+                               const gps_data_t *gps_data, 
+                               const char *topic)
+{
+    if (client == NULL || gps_data == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // 使用默认主题如果未指定
+    if (topic == NULL) {
+        topic = MQTT_PUBLISH_DATA_TOPIC "/gps";
+    }
+    
+    // 创建JSON字符串缓冲区
+    char json_buffer[JSON_BUFFER_SIZE];
+    
+    // 将GPS数据转换为JSON
+    esp_err_t ret = json_generate_from_gps_data(gps_data, json_buffer, JSON_BUFFER_SIZE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "生成GPS JSON数据失败: %d", ret);
+        return ret;
+    }
+    
+    // 发布到MQTT
+    int msg_id = esp_mqtt_client_publish(client, topic, json_buffer, strlen(json_buffer), 1, 0);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "发布GPS数据失败");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "发布GPS数据成功，msg_id=%d", msg_id);
+    return ESP_OK;
+}
+
+esp_mqtt_client_handle_t mqtt_get_client(void)
+{
+    return s_mqtt_client;
 }

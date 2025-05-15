@@ -35,17 +35,17 @@ menu "4G Modem Example Config"
 
     config EXAMPLE_AUTO_UPDATE_DNS
         bool "Auto update Wi-Fi soft ap DNS address"
-        default y
+        default n
         help
             If true using dns address got from ppp
 
     config EXAMPLE_PING_NETWORK
         bool "Ping network to check the state"
-        default y
+        default n
 
     config EXAMPLE_PING_MANUAL
         bool "Ping manual address"
-        default y
+        default n
 
     config EXAMPLE_PING_MANUAL_ADDR
         string "Manual address"
@@ -65,124 +65,75 @@ menu "4G Modem Example Config"
 
     config EXAMPLE_LED_RED_SYSTEM_GPIO
         int "System status led (red) gpio, set 0 if not use"
-        default 15
+        default 0
     config EXAMPLE_LED_BLUE_WIFI_GPIO
         int "Wi-Fi status led (blue) gpio, set 0 if not use"
-        default 17
+        default 0
     config EXAMPLE_LED_GREEN_4GMODEM_GPIO
         int "Modem status led (green) gpio, set 0 if not use"
-        default 16
+        default 0
     
-    
-    config GNSS_UART_NUM
-        int "UART port number"
-        default 1
-
-    config GNSS_UART_RX
-        int "UART RX GPIO number"
-        default 17
-    config GNSS_UART_TX
-        int "UART TX GPIO number"
-        default 18
-    menu "GPS Configuration"
-
-        orsource "$IDF_PATH/examples/common_components/env_caps/$IDF_TARGET/Kconfig.env_caps"
-        config NMEA_PARSER_UART_TXD
-            int "UART TXD pin number"
-            range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
-            default 18
-            help
-                GPIO number for UART TX pin. See UART documentation for more information
-                about available pin numbers for UART.
-        config NMEA_PARSER_UART_RXD
-            int "UART RXD pin number"
-            range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
+    menu "GNSS Configuration"
+        config GNSS_UART_NUM
+            int "UART port number"
+            default 1
+        config GNSS_UART_RX
+            int "UART RX GPIO number"
             default 17
+        config GNSS_UART_TX
+            int "UART TX GPIO number"
+            default 18
+    endmenu
+
+    menu "Sensors Configuration"
+        config DHT11_GPIO_PIN
+            int "DHT11 GPIO number"
+            default 16
+        config BH1750_I2C_ADDRESS
+            hex "BH1750 I2C address"
+            default 0x23
+        config BH1750_I2C_SDA_PIN
+            int "BH1750 I2C SDA pin"
+            default 7
+        config BH1750_I2C_SCL_PIN
+            int "BH1750 I2C SCL pin"
+            default 8
+        config BH1750_I2C_FREQ_HZ
+            int "BH1750 I2C frequency"
+            default 100000
+    endmenu
+
+    menu "MQTT Configuration"
+        config MQTT_BROKER_URI
+            string "MQTT broker URI"
+            default "mqtt://116.62.62.70"
             help
-                GPIO number for UART RX pin. See UART documentation for more information
-                about available pin numbers for UART.
-
-        config NMEA_PARSER_RING_BUFFER_SIZE
-            int "NMEA Parser Ring Buffer Size"
-            range 0 2048
-            default 1024
+                MQTT服务器地址，格式为mqtt://hostname:port
+        config MQTT_BROKER_USERNAME
+            string "MQTT broker username"
+            default ""
             help
-                Size of the ring buffer used for UART Rx channel.
-
-        config NMEA_PARSER_TASK_STACK_SIZE
-            int "NMEA Parser Task Stack Size"
-            range 0 4096
-            default 3072
+                MQTT服务器用户名，如不需要可留空
+        config MQTT_BROKER_PASSWORD
+            string "MQTT broker password"
+            default ""
             help
-                Stack size of NMEA Parser task.
-
-        config NMEA_PARSER_TASK_PRIORITY
-            int "NMEA Parser Task Priority"
-            range 0 24
-            default 2
+                MQTT服务器密码，如不需要可留空
+        config MQTT_SUBSCRIBE_TOPIC
+            string "MQTT subscribe topic"
+            default "esp32/subscribe"
             help
-                Priority of NMEA Parser task.
-
-        menu "NMEA Statement Support"
-            comment "At least one statement must be selected"
-            config NMEA_STATEMENT_GGA
-                bool "GGA Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from GGA statement:
-
-                    - Latitude, Longitude, Altitude;
-                    - Number of satellites in use, fix status (no fix, GPS, DGPS), UTC time;
-
-            config NMEA_STATEMENT_GSA
-                bool "GSA Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from GSA statement:
-
-                    - Position/Vertical/Horizontal dilution of precision;
-                    - Fix mode (no fix, 2D, 3D fix);
-                    - IDs of satellites in use;
-
-            config NMEA_STATEMENT_GSV
-                bool "GSV Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from GSV statement:
-
-                    - Number of satellites in view;
-                    - Optional details of each satellite in view;
-
-            config NMEA_STATEMENT_RMC
-                bool "RMC Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from RMC statement:
-
-                    - Validity of GPS signal;
-                    - Ground speed (knots) and course over ground (degrees);
-                    - Magnetic variation;
-                    - UTC date;
-
-            config NMEA_STATEMENT_GLL
-                bool "GLL Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from GLL statement:
-
-                    - Latitude, Longitude;
-                    - UTC time;
-
-            config NMEA_STATEMENT_VTG
-                bool "VTG Statement"
-                default y
-                help
-                    Enabling this option will parse the following parameter from VTG statement:
-
-                    - Ground speed (knots, km/h) and course over ground (degrees);
-                    - Magnetic variation;
-
-        endmenu
+                MQTT订阅主题
+        config MQTT_PUBLISH_TOPIC
+            string "MQTT publish topic"
+            default "esp32/publish"
+            help
+                MQTT发布主题
+        config MQTT_DATA_TOPIC
+            string "MQTT data publish topic"
+            default "esp32/data"
+            help
+                用于发布传感器和GPS数据的MQTT主题
     endmenu
 endmenu
 

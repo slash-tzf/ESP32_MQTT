@@ -24,6 +24,7 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "modem_http_config.h"
+#include "data_model.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -951,6 +952,72 @@ end:
     return ESP_OK;
 }
 
+static esp_err_t sensors_data_get_handler(httpd_req_t *req)
+{
+    char *json_str = NULL;
+    size_t size = 0;
+    
+    // 获取最新的数据模型
+    data_model_t *model = data_model_get_latest();
+    if (model == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No sensor data available");
+        return ESP_FAIL;
+    }
+    
+    // 构建JSON响应
+    size = asprintf(&json_str, 
+                    "{"
+                    "\"temperature\":%.2f,"
+                    "\"humidity\":%.2f,"
+                    "\"light_intensity\":%.2f,"
+                    "\"sensors_valid\":%s,"
+                    "\"latitude\":%.6f,"
+                    "\"longitude\":%.6f,"
+                    "\"ns_indicator\":\"%c\","
+                    "\"ew_indicator\":\"%c\","
+                    "\"altitude\":%.2f,"
+                    "\"speed\":%.2f,"
+                    "\"course\":%.2f,"
+                    "\"data_source\":%d,"
+                    "\"gps_valid\":%s,"
+                    "\"timestamp\":%ld"
+                    "}",
+                    model->sensors.temperature,
+                    model->sensors.humidity,
+                    model->sensors.light_intensity,
+                    model->sensors.sensors_valid ? "true" : "false",
+                    model->gps.latitude,
+                    model->gps.longitude,
+                    model->gps.ns_indicator,
+                    model->gps.ew_indicator,
+                    model->gps.altitude,
+                    model->gps.speed,
+                    model->gps.course,
+                    model->gps.data_source,
+                    model->gps.gps_valid ? "true" : "false",
+                    (long)model->timestamp);
+    
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "*");
+    
+    // 设置HTTP状态码
+    esp_err_t ret = httpd_resp_set_status(req, HTTPD_200);
+    ESP_ERROR_CHECK(ret);
+    
+    // 设置HTTP内容类型
+    ret = httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+    ESP_ERROR_CHECK(ret);
+    
+    // 发送响应
+    ret = httpd_resp_send(req, json_str, size);
+    ESP_LOGD(TAG, "%s", json_str);
+    free(json_str);
+    ESP_ERROR_CHECK(ret);
+    
+    return ESP_OK;
+}
+
 static httpd_uri_t wlan_general = {
     .uri = "/wlan_general",
     .method = HTTP_GET,
@@ -1023,6 +1090,13 @@ static httpd_uri_t system_station_change_name_post = {
     .user_ctx = NULL
 };
 
+static httpd_uri_t sensors_data_get = {
+    .uri       = "/sensors/data",
+    .method    = HTTP_GET,
+    .handler   = sensors_data_get_handler,
+    .user_ctx  = NULL
+};
+
 static httpd_handle_t start_webserver(const char *base_path)
 {
     ctx_info_t *ctx_info = calloc(1, sizeof(ctx_info_t));
@@ -1066,6 +1140,9 @@ static httpd_handle_t start_webserver(const char *base_path)
         httpd_register_uri_handler(server, &login_get);
         login_post.user_ctx = ctx_info;
         httpd_register_uri_handler(server, &login_post);
+        sensors_data_get.user_ctx = ctx_info;
+        httpd_register_uri_handler(server, &sensors_data_get);
+        
         httpd_uri_t common_get_uri = {
             .uri = "/*",
             .method = HTTP_GET,
