@@ -25,6 +25,7 @@
 #include "esp_wifi.h"
 #include "modem_http_config.h"
 #include "data_model.h"
+#include "network_manager.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -65,13 +66,6 @@ static SemaphoreHandle_t s_sta_node_mutex = NULL;
 static modem_wifi_config_t *s_modem_wifi_config = NULL;
 static modem_http_list_head_t s_sta_list_head = SLIST_HEAD_INITIALIZER(s_sta_list_head);
 
-static void restart()
-{
-    ESP_LOGI(TAG, "Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
-}
-
 static void delete_char(char *str, char target)
 {
     int i, j;
@@ -81,6 +75,42 @@ static void delete_char(char *str, char target)
         }
     }
     str[j] = '\0';
+}
+
+/**
+ * @brief URL解码函数，将URL编码的字符串转换为普通字符串
+ * 
+ * @param input 输入的URL编码字符串
+ * @param output 输出的解码后字符串
+ */
+static void url_decode(const char *input, char *output)
+{
+    char *out = output;
+    const char *in = input;
+    
+    while (*in) {
+        if (*in == '%' && *(in + 1) && *(in + 2)) {
+            // 处理百分号编码
+            char hex[3] = {*(in + 1), *(in + 2), 0};
+            *out++ = (char)strtol(hex, NULL, 16);
+            in += 3;
+        } else if (*in == '+') {
+            // 将加号转换为空格
+            *out++ = ' ';
+            in++;
+        } else {
+            // 其他字符直接复制
+            *out++ = *in++;
+        }
+    }
+    *out = '\0';
+}
+
+static void restart()
+{
+    ESP_LOGI(TAG, "Restarting now.\n");
+    fflush(stdout);
+    esp_restart();
 }
 
 typedef struct rest_server_context {
@@ -1018,6 +1048,137 @@ static esp_err_t sensors_data_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t wifi_sta_get_handler(httpd_req_t *req)
+{
+    // 检查权限
+    if (basic_auth_get(req) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    // 重定向到静态HTML文件
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/wifi_sta.html");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t wifi_sta_post_handler(httpd_req_t *req)
+{
+    // 检查权限
+    if (basic_auth_get(req) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    
+    // 获取POST数据
+    char *buf = malloc(1024);
+    if (buf == NULL) {
+        ESP_LOGE(TAG, "内存分配失败");
+        return ESP_FAIL;
+    }
+    
+    int total_len = req->content_len;
+    int cur_len = 0;
+    int received = 0;
+    
+    if (total_len >= 1024) {
+        ESP_LOGE(TAG, "内容太长");
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "内容太长");
+        return ESP_FAIL;
+    }
+    
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            ESP_LOGE(TAG, "接收数据失败");
+            free(buf);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "接收数据失败");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+    
+    ESP_LOGI(TAG, "收到的WiFi配置数据: %s", buf);
+    
+    // 解析SSID和密码
+    char ssid[33] = {0};
+    char password[65] = {0};
+    
+    char *ssid_ptr = strstr(buf, "ssid=");
+    char *password_ptr = strstr(buf, "password=");
+    
+    if (ssid_ptr) {
+        ssid_ptr += 5; // 跳过 "ssid="
+        char *end = strchr(ssid_ptr, '&');
+        if (end) {
+            strncpy(ssid, ssid_ptr, end - ssid_ptr);
+        } else {
+            strcpy(ssid, ssid_ptr);
+        }
+    }
+    
+    if (password_ptr) {
+        password_ptr += 9; // 跳过 "password="
+        char *end = strchr(password_ptr, '&');
+        if (end) {
+            strncpy(password, password_ptr, end - password_ptr);
+        } else {
+            strcpy(password, password_ptr);
+        }
+    }
+    
+    free(buf);
+    
+    // URL解码
+    char decoded_ssid[33] = {0};
+    char decoded_password[65] = {0};
+    
+    url_decode(ssid, decoded_ssid);
+    url_decode(password, decoded_password);
+    
+    ESP_LOGI(TAG, "解析的WiFi配置 - SSID: %s", decoded_ssid);
+    
+    // 保存配置并尝试连接
+    esp_err_t ret = network_manager_set_wifi_config(decoded_ssid, decoded_password);
+    
+    // 返回JSON结果
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    
+    if (ret == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"WiFi配置已保存并尝试连接\"}");
+    } else {
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"保存WiFi配置失败\"}");
+    }
+    
+    return ESP_OK;
+}
+
+// 添加网络模式获取API
+static esp_err_t network_mode_get_handler(httpd_req_t *req)
+{
+    // 检查权限
+    if (basic_auth_get(req) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    // 获取当前网络模式
+    network_mode_t current_mode = network_manager_get_mode();
+    
+    // 返回JSON结果
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    
+    char *resp_str = NULL;
+    asprintf(&resp_str, "{\"mode\":%d}", current_mode);
+    
+    httpd_resp_sendstr(req, resp_str);
+    free(resp_str);
+    
+    return ESP_OK;
+}
+
 static httpd_uri_t wlan_general = {
     .uri = "/wlan_general",
     .method = HTTP_GET,
@@ -1097,6 +1258,27 @@ static httpd_uri_t sensors_data_get = {
     .user_ctx  = NULL
 };
 
+static httpd_uri_t wifi_sta_get = {
+    .uri = "/wifi_sta",
+    .method = HTTP_GET,
+    .handler = wifi_sta_get_handler,
+    .user_ctx = NULL
+};
+
+static httpd_uri_t wifi_sta_post = {
+    .uri = "/wifi_sta",
+    .method = HTTP_POST,
+    .handler = wifi_sta_post_handler,
+    .user_ctx = NULL
+};
+
+static httpd_uri_t network_mode_get = {
+    .uri = "/network_mode",
+    .method = HTTP_GET,
+    .handler = network_mode_get_handler,
+    .user_ctx = NULL
+};
+
 static httpd_handle_t start_webserver(const char *base_path)
 {
     ctx_info_t *ctx_info = calloc(1, sizeof(ctx_info_t));
@@ -1111,6 +1293,7 @@ static httpd_handle_t start_webserver(const char *base_path)
 
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;
     config.max_uri_handlers = 15;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
@@ -1142,6 +1325,12 @@ static httpd_handle_t start_webserver(const char *base_path)
         httpd_register_uri_handler(server, &login_post);
         sensors_data_get.user_ctx = ctx_info;
         httpd_register_uri_handler(server, &sensors_data_get);
+        wifi_sta_get.user_ctx = ctx_info;
+        httpd_register_uri_handler(server, &wifi_sta_get);
+        wifi_sta_post.user_ctx = ctx_info;
+        httpd_register_uri_handler(server, &wifi_sta_post);
+        network_mode_get.user_ctx = ctx_info;
+        httpd_register_uri_handler(server, &network_mode_get);
         
         httpd_uri_t common_get_uri = {
             .uri = "/*",

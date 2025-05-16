@@ -1,9 +1,8 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
@@ -38,7 +37,7 @@ static const char *TAG = "esp-modem-dte";
  */
 static inline bool is_only_cr_lf(const char *str, uint32_t len)
 {
-    for (int i=0; i<len; ++i) {
+    for (int i = 0; i < len; ++i) {
         if (str[i] != '\r' && str[i] != '\n') {
             return false;
         }
@@ -91,25 +90,25 @@ err:
 static void esp_handle_usb_data(esp_modem_dte_internal_t *esp_dte)
 {
     size_t length = 0;
-    usbh_cdc_get_buffered_data_len(&length);
+    usbh_cdc_get_rx_buffer_size(esp_dte->cdc_hdl, &length);
 
     if (esp_dte->parent.dce->mode != ESP_MODEM_PPP_MODE && length) {
 
         // Read the data and process it using `handle_line` logic
         // to avoid reading two line at the same time
-        length = MIN(esp_dte->line_buffer_size-1, length);
-        length = usbh_cdc_read_bytes(esp_dte->buffer, length, pdMS_TO_TICKS(10));
+        length = MIN(esp_dte->line_buffer_size - 1, length);
+        usbh_cdc_read_bytes(esp_dte->cdc_hdl, esp_dte->buffer, &length, pdMS_TO_TICKS(100));
         esp_dte->buffer[length] = '\0';
-        if (strchr((char*)esp_dte->buffer, '\n') == NULL) {
-            size_t max = esp_dte->line_buffer_size-1;
-            size_t bytes;
+        if (strchr((char *)esp_dte->buffer, '\n') == NULL) {
+            size_t max = esp_dte->line_buffer_size - 1;
             // if pattern not found in the data,
             // continue reading as long as the modem is in MODEM_STATE_PROCESSING, checking for the pattern
-            while (length < max && esp_dte->buffer[length-1] != '\n' &&
-                   esp_dte->parent.dce->state == ESP_MODEM_STATE_PROCESSING) {
-                bytes = usbh_cdc_read_bytes(esp_dte->buffer + length, 1, pdMS_TO_TICKS(10));
-                length += bytes;
-                ESP_LOGV("esp-modem: debug_data", "Continuous read in non-data mode: length: %d char: %x", length, esp_dte->buffer[length-1]);
+            while (length < max && esp_dte->buffer[length - 1] != '\n' &&
+                    esp_dte->parent.dce->state == ESP_MODEM_STATE_PROCESSING) {
+                size_t len = 1;
+                usbh_cdc_read_bytes(esp_dte->cdc_hdl, esp_dte->buffer + length, &len, pdMS_TO_TICKS(100));
+                length += len;
+                ESP_LOGV("esp-modem: debug_data", "Continuous read in non-data mode: length: %d char: %x", length, esp_dte->buffer[length - 1]);
             }
             esp_dte->buffer[length] = '\0';
         }
@@ -121,7 +120,7 @@ static void esp_handle_usb_data(esp_modem_dte_internal_t *esp_dte)
         return;
     }
     length = MIN(esp_dte->data_buffer_size, length);
-    length = usbh_cdc_read_bytes(esp_dte->data_buffer, length, pdMS_TO_TICKS(10));
+    usbh_cdc_read_bytes(esp_dte->cdc_hdl, esp_dte->data_buffer, &length, pdMS_TO_TICKS(100));
     /* pass the input data to configured callback */
     if (length) {
         ESP_LOG_BUFFER_HEXDUMP("esp-modem-dte: ppp_input", esp_dte->data_buffer, length, ESP_LOG_VERBOSE);
@@ -132,26 +131,26 @@ static void esp_handle_usb_data(esp_modem_dte_internal_t *esp_dte)
 static void esp_handle_usb2_data(esp_modem_dte_internal_t *esp_dte)
 {
     size_t length = 0;
-    usbh_cdc_itf_get_buffered_data_len(1, &length);
-    
+    usbh_cdc_get_rx_buffer_size(esp_dte->cdc_hdl2, &length);
+
     // Only handle interface1 data during interface0 in ppp mode
     if (esp_dte->parent.dce->mode == ESP_MODEM_PPP_MODE && length) {
 
         // Read the data and process it using `handle_line` logic
         // to avoid reading two line at the same time
-        length = MIN(esp_dte->line_buffer_size-1, length);
-        length = usbh_cdc_itf_read_bytes(1, esp_dte->buffer, length, pdMS_TO_TICKS(10));
+        length = MIN(esp_dte->line_buffer_size - 1, length);
+        usbh_cdc_read_bytes(esp_dte->cdc_hdl2, esp_dte->buffer, &length, pdMS_TO_TICKS(100));
         esp_dte->buffer[length] = '\0';
-        if (strchr((char*)esp_dte->buffer, '\n') == NULL) {
-            size_t max = esp_dte->line_buffer_size-1;
-            size_t bytes;
+        if (strchr((char *)esp_dte->buffer, '\n') == NULL) {
+            size_t max = esp_dte->line_buffer_size - 1;
             // if pattern not found in the data,
             // continue reading as long as the modem is in MODEM_STATE_PROCESSING, checking for the pattern
-            while (length < max && esp_dte->buffer[length-1] != '\n' &&
-                   esp_dte->parent.dce->state == ESP_MODEM_STATE_PROCESSING) {
-                bytes = usbh_cdc_itf_read_bytes(1, esp_dte->buffer + length, 1, pdMS_TO_TICKS(10));
-                length += bytes;
-                ESP_LOGV("esp-modem: debug_data2", "Continuous read in non-data mode: length: %d char: %x", length, esp_dte->buffer[length-1]);
+            while (length < max && esp_dte->buffer[length - 1] != '\n' &&
+                    esp_dte->parent.dce->state == ESP_MODEM_STATE_PROCESSING) {
+                size_t len = 1;
+                usbh_cdc_read_bytes(esp_dte->cdc_hdl2, esp_dte->buffer + length, &len, pdMS_TO_TICKS(100));
+                length += len;
+                ESP_LOGV("esp-modem: debug_data2", "Continuous read in non-data mode: length: %d char: %x", length, esp_dte->buffer[length - 1]);
             }
             esp_dte->buffer[length] = '\0';
         }
@@ -164,37 +163,45 @@ static void esp_handle_usb2_data(esp_modem_dte_internal_t *esp_dte)
     }
     length = MIN(esp_dte->data_buffer_size, length);
     uint8_t *temp_buffer = (uint8_t *)calloc(1, length);
-    length = usbh_cdc_itf_read_bytes(1, temp_buffer, length, pdMS_TO_TICKS(10));
+    usbh_cdc_read_bytes(esp_dte->cdc_hdl2, esp_dte->data_buffer, &length, pdMS_TO_TICKS(100));
     /* pass the input data to configured callback */
     if (length) {
-        ESP_LOGI(TAG,"Intf2 not handle date, just dump:");
+        ESP_LOGI(TAG, "Intf2 not handle date, just dump:");
         ESP_LOG_BUFFER_HEXDUMP("esp-modem-dte: inf2", temp_buffer, length, ESP_LOG_INFO);
     }
     free(temp_buffer);
 }
 
-static void _usb_recv_date_cb(void *arg)
+static void _usb_recv_date_cb(usbh_cdc_handle_t cdc_handle, void *arg)
 {
-    TaskHandle_t *p_usb_event_hdl = (TaskHandle_t *)arg;
-    if (*p_usb_event_hdl == NULL) return;
-    xTaskNotifyGive(*p_usb_event_hdl);
+    esp_modem_dte_internal_t *esp_dte = (esp_modem_dte_internal_t *)arg;
+    if (esp_dte->uart_event_task_hdl == NULL) {
+        return;
+    }
+    xTaskNotifyGive(esp_dte->uart_event_task_hdl);
 }
 
-static void _usb_conn_callback(void *arg)
+static void _usb_conn_callback(usbh_cdc_handle_t cdc_handle, void *arg)
 {
     esp_modem_dte_internal_t *esp_dte = (esp_modem_dte_internal_t *)arg;
     esp_dte->conn_state = 1;
+
+#if CONFIG_MODEM_PRINT_DEVICE_DESCRIPTOR
+    usbh_cdc_desc_print(cdc_handle);
+#endif
+
     if (esp_dte->conn_callback) {
-        esp_dte->conn_callback(NULL);
+        esp_dte->conn_callback(cdc_handle, NULL);
     }
+    vTaskResume(esp_dte->uart_event_task_hdl);
 }
 
-static void _usb_disconn_callback(void *arg)
+static void _usb_disconn_callback(usbh_cdc_handle_t cdc_handle, void *arg)
 {
     esp_modem_dte_internal_t *esp_dte = (esp_modem_dte_internal_t *)arg;
     esp_dte->conn_state = 0;
     if (esp_dte->disconn_callback) {
-        esp_dte->disconn_callback(NULL);
+        esp_dte->disconn_callback(cdc_handle, NULL);
     }
 }
 
@@ -205,27 +212,29 @@ static void _usb_disconn_callback(void *arg)
  */
 static void _usb_data_recv_task(void *param)
 {
+    vTaskSuspend(NULL);
     esp_modem_dte_internal_t *esp_dte = (esp_modem_dte_internal_t *)param;
-    EventBits_t bits = xEventGroupWaitBits(esp_dte->process_group, (ESP_MODEM_START_BIT|ESP_MODEM_STOP_BIT), pdFALSE, pdFALSE, portMAX_DELAY);
+    EventBits_t bits = xEventGroupWaitBits(esp_dte->process_group, (ESP_MODEM_START_BIT | ESP_MODEM_STOP_BIT), pdFALSE, pdFALSE, portMAX_DELAY);
     if (bits & ESP_MODEM_STOP_BIT) {
         vTaskDelete(NULL);
     }
-    usbh_cdc_flush_rx_buffer(0);
-    usbh_cdc_flush_rx_buffer(1);
+
     while (xEventGroupGetBits(esp_dte->process_group) & ESP_MODEM_START_BIT) {
         /* Drive the event loop */
         esp_event_loop_run(esp_dte->event_loop_hdl, 0);//no block
         size_t length = 0, length2 = 0;
-        usbh_cdc_itf_get_buffered_data_len(0, &length);
+        usbh_cdc_get_rx_buffer_size(esp_dte->cdc_hdl, &length);
         if (length > 0) {
             esp_handle_usb_data(esp_dte);
         }
-        if (usbh_cdc_get_itf_state(1)) {
-            usbh_cdc_itf_get_buffered_data_len(1, &length2);
-            if(length2 > 0) esp_handle_usb2_data(esp_dte);
+        if (esp_dte->cdc_hdl2) {
+            usbh_cdc_get_rx_buffer_size(esp_dte->cdc_hdl2, &length2);
+            if (length2 > 0) {
+                esp_handle_usb2_data(esp_dte);
+            }
         }
         if (!(length || length2)) {
-            ulTaskNotifyTake(true, 1);//yield to other task, but unblock as soon as possiable
+            ulTaskNotifyTake(true, pdMS_TO_TICKS(100));//yield to other task, but unblock as soon as possible
         }
     }
     vTaskDelete(NULL);
@@ -252,21 +261,23 @@ static esp_err_t esp_modem_dte_send_cmd(esp_modem_dte_t *dte, const char *comman
     /* Reset runtime information */
     dce->state = ESP_MODEM_STATE_PROCESSING;
     /* Send command via UART */
-    if (dce->mode == ESP_MODEM_PPP_MODE && usbh_cdc_get_itf_state(1) && strcmp(command, "+++")) {
+    if (dce->mode == ESP_MODEM_PPP_MODE && esp_dte->cdc_hdl2 && strcmp(command, "+++")) {
         /* if interface 0 in ppp mode while interface 1 exist, and command not ppp exist "+++"
          * using interface 1 for command send*/
-        usbh_cdc_itf_write_bytes(1, (const uint8_t*)command, strlen(command));
+        size_t length = strlen(command);
+        usbh_cdc_write_bytes(esp_dte->cdc_hdl2, (const uint8_t*)command, length, pdMS_TO_TICKS(100));
     } else if (dce->mode != ESP_MODEM_PPP_MODE || strcmp(command, "+++") == 0) {
         /* send command in no PPP mode, or send +++ in PPP mode */
-        usbh_cdc_itf_write_bytes(0, (const uint8_t*)command, strlen(command));
+        size_t length = strlen(command);
+        usbh_cdc_write_bytes(esp_dte->cdc_hdl, (const uint8_t*)command, length, pdMS_TO_TICKS(100));
     } else {
         ESP_LOGW(TAG, "Not support sending command in ppp mode, please exit ppp mode first");
         return ESP_FAIL;
     }
 
     /* Check timeout */
-    EventBits_t bits = xEventGroupWaitBits(esp_dte->process_group, (ESP_MODEM_COMMAND_BIT|ESP_MODEM_STOP_BIT), pdTRUE, pdFALSE, pdMS_TO_TICKS(timeout));
-    ESP_MODEM_ERR_CHECK(bits&ESP_MODEM_COMMAND_BIT, "process command timeout", err);
+    EventBits_t bits = xEventGroupWaitBits(esp_dte->process_group, (ESP_MODEM_COMMAND_BIT | ESP_MODEM_STOP_BIT), pdTRUE, pdFALSE, pdMS_TO_TICKS(timeout));
+    ESP_MODEM_ERR_CHECK(bits & ESP_MODEM_COMMAND_BIT, "process command timeout", err);
     ret = ESP_OK;
 err:
     dce->handle_line = NULL;
@@ -291,7 +302,8 @@ static int esp_modem_dte_send_data(esp_modem_dte_t *dte, const char *data, uint3
     }
     ESP_LOG_BUFFER_HEXDUMP("esp-modem-dte: ppp_output", data, length, ESP_LOG_VERBOSE);
 
-    return usbh_cdc_write_bytes((const uint8_t*)data, length);
+    usbh_cdc_write_bytes(esp_dte->cdc_hdl, (const uint8_t*)data, length, pdMS_TO_TICKS(100));
+    return length;
 err:
     return -1;
 }
@@ -313,10 +325,13 @@ static esp_err_t esp_modem_dte_send_wait(esp_modem_dte_t *dte, const char *data,
 {
     ESP_MODEM_ERR_CHECK(data, "data is NULL", err_param);
     ESP_MODEM_ERR_CHECK(prompt, "prompt is NULL", err_param);
-    ESP_MODEM_ERR_CHECK(usbh_cdc_write_bytes((const uint8_t*)data, length) >= 0, "uart write bytes failed", err_param);
-    uint32_t len = strlen(prompt);
+    esp_modem_dte_internal_t *esp_dte = __containerof(dte, esp_modem_dte_internal_t, parent);
+    size_t len = length;
+    ESP_MODEM_ERR_CHECK(usbh_cdc_write_bytes(esp_dte->cdc_hdl, (const uint8_t*)data, len, pdMS_TO_TICKS(100)) == ESP_OK, "uart write bytes failed", err_param);
+    len = strlen(prompt);
     uint8_t *buffer = calloc(len + 1, sizeof(uint8_t));
-    int ret = usbh_cdc_read_bytes(buffer, len, pdMS_TO_TICKS(timeout));
+    // TODO: timeout
+    int ret = usbh_cdc_read_bytes(esp_dte->cdc_hdl, buffer, &len, pdMS_TO_TICKS(100));
     ESP_MODEM_ERR_CHECK(ret >= len, "wait prompt [%s] timeout", err, prompt);
     ESP_MODEM_ERR_CHECK(!strncmp(prompt, (const char *)buffer, len), "get wrong prompt: %s", err, buffer);
     free(buffer);
@@ -340,12 +355,12 @@ static esp_err_t esp_modem_dte_change_mode(esp_modem_dte_t *dte, esp_modem_mode_
 {
     esp_modem_dce_t *dce = dte->dce;
     ESP_MODEM_ERR_CHECK(dce, "DTE has not yet bind with DCE", err);
-    //esp_modem_dte_internal_t *esp_dte = __containerof(dte, esp_modem_dte_internal_t, parent);
+    // esp_modem_dte_internal_t *esp_dte = __containerof(dte, esp_modem_dte_internal_t, parent);
     ESP_MODEM_ERR_CHECK(dce->mode != new_mode, "already in mode: %d", err, new_mode);
     esp_modem_mode_t current_mode = dce->mode;
     ESP_MODEM_ERR_CHECK(current_mode != new_mode, "already in mode: %d", err, new_mode);
     dce->mode = ESP_MODEM_TRANSITION_MODE;  // mode switching will be finished in set_working_mode() on success
-                                            // (or restored on failure)
+    // (or restored on failure)
     switch (new_mode) {
     case ESP_MODEM_PPP_MODE:
         ESP_MODEM_ERR_CHECK(dce->set_working_mode(dce, new_mode) == ESP_OK, "set new working mode:%d failed", err_restore_mode, new_mode);
@@ -391,8 +406,18 @@ static esp_err_t esp_modem_dte_deinit(esp_modem_dte_t *dte)
     esp_event_loop_delete(esp_dte->event_loop_hdl);
     /* Delete send cmd lock */
     vSemaphoreDelete(esp_dte->parent.send_cmd_lock);
+    if (esp_dte->cdc_hdl) {
+        usbh_cdc_delete(esp_dte->cdc_hdl);
+        esp_dte->cdc_hdl = NULL;
+    }
+
+    if (esp_dte->cdc_hdl2) {
+        usbh_cdc_delete(esp_dte->cdc_hdl2);
+        esp_dte->cdc_hdl2 = NULL;
+    }
+
     /* Uninstall UART Driver */
-    usbh_cdc_driver_delete();
+    usbh_cdc_driver_uninstall();
     /* Free memory */
     free(esp_dte->buffer);
     free(esp_dte->data_buffer);
@@ -441,46 +466,64 @@ esp_modem_dte_t *esp_modem_dte_new(const esp_modem_dte_config_t *config)
     esp_dte->process_group = xEventGroupCreate();
     ESP_MODEM_ERR_CHECK(esp_dte->process_group, "create process semaphore failed", err_sem);
 
-    usbh_cdc_config_t cdc_config = {
-        .bulk_in_ep_addr = CONFIG_MODEM_USB_IN_EP_ADDR,
-        .bulk_out_ep_addr = CONFIG_MODEM_USB_OUT_EP_ADDR,
-        .rx_buffer_size = config->rx_buffer_size,
-        .tx_buffer_size = config->tx_buffer_size,
-        .rx_callback = _usb_recv_date_cb,
-        .rx_callback_arg = &esp_dte->uart_event_task_hdl,
-        .conn_callback = _usb_conn_callback,
-        .conn_callback_arg = esp_dte,
-        .disconn_callback = _usb_disconn_callback,
-        .disconn_callback_arg = esp_dte,
+    usbh_cdc_driver_config_t cdc_driver_config  = {
+        .task_stack_size = 1024 * 4,
+        .task_priority = 5,
+        .task_coreid = 0,
+        .skip_init_usb_host_driver = false,
     };
 
-#ifdef CONFIG_MODEM_SUPPORT_SECONDARY_AT_PORT
-    cdc_config.itf_num = 2,
-    cdc_config.bulk_in_ep_addrs[1] = CONFIG_MODEM_USB_IN2_EP_ADDR;
-    cdc_config.bulk_out_ep_addrs[1] = CONFIG_MODEM_USB_OUT2_EP_ADDR;
-    cdc_config.rx_buffer_sizes[1] = config->rx_buffer_size;
-    cdc_config.tx_buffer_sizes[1] = config->tx_buffer_size;
-    ESP_LOGI(TAG, "Enable second AT port");
-#endif
-
-    ret = usbh_cdc_driver_install(&cdc_config);
+    ret = usbh_cdc_driver_install(&cdc_driver_config);
     ESP_MODEM_ERR_CHECK(ret == ESP_OK, "usb driver install failed", err_usb_config);
-    ret = usbh_cdc_wait_connect(portMAX_DELAY);
-    ESP_MODEM_ERR_CHECK(ret == ESP_OK, "usb connect timeout", err_usb_config);
+
     /* Create USB Event task */
     BaseType_t base_ret = xTaskCreate(_usb_data_recv_task,             //Task Entry
-                                 "usb_data_recv",              //Task Name
-                                 config->event_task_stack_size,           //Task Stack Size(Bytes)
-                                 esp_dte,                           //Task Parameter
-                                 config->event_task_priority,             //Task Priority, must higher than USB Task
-                                 &(esp_dte->uart_event_task_hdl)   //Task Handler
-                                );
+                                      "usb_data_recv",              //Task Name
+                                      config->event_task_stack_size,           //Task Stack Size(Bytes)
+                                      esp_dte,                           //Task Parameter
+                                      config->event_task_priority,             //Task Priority, must higher than USB Task
+                                      & (esp_dte->uart_event_task_hdl)  //Task Handler
+                                     );
     ESP_MODEM_ERR_CHECK(base_ret == pdTRUE, "create uart event task failed", err_tsk_create);
+
+    usbh_cdc_device_config_t dev_config = {
+        .vid = 0,
+        .pid = 0,
+        .itf_num = CONFIG_MODEM_USB_ITF,
+        .rx_buffer_size = config->rx_buffer_size,
+        .tx_buffer_size = config->tx_buffer_size,
+        .cbs = {
+            .connect = _usb_conn_callback,
+            .disconnect = _usb_disconn_callback,
+            .recv_data = _usb_recv_date_cb,
+            .user_data = esp_dte,
+        },
+    };
+
+    usbh_cdc_handle_t handle = NULL;
+    usbh_cdc_create(&dev_config, &handle);
+    ESP_MODEM_ERR_CHECK(handle != NULL, "usb cdc device create failed", err_usb_config);
+    esp_dte->cdc_hdl = handle;
+
+#ifdef CONFIG_MODEM_SUPPORT_SECONDARY_AT_PORT
+    dev_config.itf_num = CONFIG_MODEM_USB_ITF2;
+    /*!< Dual to it is one USB device, we only need one entry point to send notifications. */
+    dev_config.cbs.connect = NULL;
+    dev_config.cbs.disconnect = NULL;
+    dev_config.cbs.user_data = NULL;
+    dev_config.cbs.revc_data = NULL;
+    handle = NULL;
+    usbh_cdc_create(&dev_config, &handle);
+    ESP_MODEM_ERR_CHECK(handle != NULL, "usb cdc device create failed", err_usb_config);
+
+    esp_dte->cdc_hdl2 = handle;
+    ESP_LOGI(TAG, "Enable second AT port");
+#endif
 
     return &(esp_dte->parent);
     /* Error handling */
 err_tsk_create:
-    usbh_cdc_driver_delete();
+    usbh_cdc_driver_uninstall();
 err_usb_config:
     vEventGroupDelete(esp_dte->process_group);
 err_sem:

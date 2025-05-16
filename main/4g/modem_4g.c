@@ -2,8 +2,13 @@
 #include "usbh_modem_board.h"
 #include "esp_log.h"
 #include "led.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "esp_event.h"
+#include "freertos/task.h"
 
 static const char *TAG = "MODEM_4G";
+
 
 static void on_modem_event(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data)
@@ -68,6 +73,37 @@ void modem_4g_init()
     /* Initialize modem board. Dial-up internet */
     modem_config_t modem_config = MODEM_DEFAULT_CONFIG();
 
+// #ifndef CONFIG_EXAMPLE_ENTER_PPP_DURING_INIT
+//     /* if Not enter ppp, modem will enter command mode after init */
+//     modem_config.flags |= MODEM_FLAGS_INIT_NOT_ENTER_PPP;
+//     /* if Not waiting for modem ready, just return after modem init */
+//     modem_config.flags |= MODEM_FLAGS_INIT_NOT_BLOCK;
+// #endif
+
     modem_config.handler = on_modem_event;
     modem_board_init(&modem_config);
+}
+
+/**
+ * @brief 断开4G模块网络连接
+ * 
+ * @return esp_err_t 
+ */
+esp_err_t modem_4g_disconnect()
+{
+    ESP_LOGI(TAG, "正在断开4G网络连接");
+    modem_board_ppp_stop(5000);
+    return ESP_OK;
+}
+
+/**
+ * @brief 重新连接4G模块网络
+ * 
+ * @return esp_err_t 
+ */
+esp_err_t modem_4g_connect()
+{
+    ESP_LOGI(TAG, "正在连接4G网络");
+    modem_board_ppp_start(5000);
+    return ESP_OK;
 }

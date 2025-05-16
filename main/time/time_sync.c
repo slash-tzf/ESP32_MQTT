@@ -14,7 +14,6 @@ void time_sync_init(void)
     if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(10000)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to update system time within 10s timeout");
     }
-
     setenv("TZ", "CST-8", 1);
     tzset();
 }

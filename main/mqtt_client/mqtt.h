@@ -55,4 +55,13 @@ esp_err_t mqtt_publish_gps_data(esp_mqtt_client_handle_t client,
  */
 esp_mqtt_client_handle_t mqtt_get_client(void);
 
+/**
+ * @brief 重新连接MQTT客户端
+ * 
+ * 当网络状态变化时调用此函数，会先停止现有连接，然后重新初始化并启动连接
+ * 
+ * @return esp_err_t ESP_OK成功，其他值失败
+ */
+esp_err_t mqtt_reconnect(void);
+
 #endif

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,6 +28,10 @@
 
 #ifdef CONFIG_EXAMPLE_PING_NETWORK
 #include "ping/ping_sock.h"
+#endif
+
+#ifdef CONFIG_ESP32_S3_USB_OTG
+#include "bsp/esp-bsp.h"
 #endif
 
 static const char *TAG = "4g_main";
@@ -139,35 +143,35 @@ static void on_modem_event(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data)
 {
     if (event_base == MODEM_BOARD_EVENT) {
-        if ( event_id == MODEM_EVENT_SIMCARD_DISCONN) {
+        if (event_id == MODEM_EVENT_SIMCARD_DISCONN) {
             ESP_LOGW(TAG, "Modem Board Event: SIM Card disconnected");
             led_indicator_start(s_led_system_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_SIMCARD_CONN) {
+        } else if (event_id == MODEM_EVENT_SIMCARD_CONN) {
             ESP_LOGI(TAG, "Modem Board Event: SIM Card Connected");
             led_indicator_stop(s_led_system_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_DTE_DISCONN) {
+        } else if (event_id == MODEM_EVENT_DTE_DISCONN) {
             ESP_LOGW(TAG, "Modem Board Event: USB disconnected");
             led_indicator_start(s_led_system_handle, BLINK_CONNECTING);
-        } else if ( event_id == MODEM_EVENT_DTE_CONN) {
+        } else if (event_id == MODEM_EVENT_DTE_CONN) {
             ESP_LOGI(TAG, "Modem Board Event: USB connected");
             led_indicator_stop(s_led_system_handle, BLINK_CONNECTED);
             led_indicator_stop(s_led_system_handle, BLINK_CONNECTING);
-        } else if ( event_id == MODEM_EVENT_DTE_RESTART) {
+        } else if (event_id == MODEM_EVENT_DTE_RESTART) {
             ESP_LOGW(TAG, "Modem Board Event: Hardware restart");
             led_indicator_start(s_led_system_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_DTE_RESTART_DONE) {
+        } else if (event_id == MODEM_EVENT_DTE_RESTART_DONE) {
             ESP_LOGI(TAG, "Modem Board Event: Hardware restart done");
             led_indicator_stop(s_led_system_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_NET_CONN) {
+        } else if (event_id == MODEM_EVENT_NET_CONN) {
             ESP_LOGI(TAG, "Modem Board Event: Network connected");
             led_indicator_start(s_led_4g_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_NET_DISCONN) {
+        } else if (event_id == MODEM_EVENT_NET_DISCONN) {
             ESP_LOGW(TAG, "Modem Board Event: Network disconnected");
             led_indicator_stop(s_led_4g_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_WIFI_STA_CONN) {
+        } else if (event_id == MODEM_EVENT_WIFI_STA_CONN) {
             ESP_LOGI(TAG, "Modem Board Event: Station connected");
             led_indicator_start(s_led_wifi_handle, BLINK_CONNECTED);
-        } else if ( event_id == MODEM_EVENT_WIFI_STA_DISCONN) {
+        } else if (event_id == MODEM_EVENT_WIFI_STA_DISCONN) {
             ESP_LOGW(TAG, "Modem Board Event: All stations disconnected");
             led_indicator_stop(s_led_wifi_handle, BLINK_CONNECTED);
         }
@@ -203,6 +207,10 @@ static void on_ping_timeout(esp_ping_handle_t hdl, void *args)
 
 void app_main(void)
 {
+#ifdef CONFIG_ESP32_S3_USB_OTG
+    bsp_usb_mode_select_host();
+    bsp_usb_host_power_mode(BSP_USB_HOST_POWER_MODE_USB_DEV, true);
+#endif
     /* Initialize led indicator */
     _led_indicator_init();
     /* Initialize NVS for Wi-Fi storage */
@@ -239,9 +247,12 @@ void app_main(void)
     modem_http_get_nvs_wifi_config(&s_modem_wifi_config);
     modem_http_init(&s_modem_wifi_config);
 #endif
+
+#if !CONFIG_IDF_TARGET_ESP32P4
     esp_netif_t *ap_netif = modem_wifi_ap_init();
     assert(ap_netif != NULL);
     ESP_ERROR_CHECK(modem_wifi_set(&s_modem_wifi_config));
+#endif
 
 #ifdef CONFIG_EXAMPLE_PING_NETWORK
     ip_addr_t target_addr;
@@ -274,7 +285,9 @@ void app_main(void)
     esp_ping_new_session(&ping_config, &cbs, &ping);
 #endif
 
+#ifdef CONFIG_EXAMPLE_AUTO_UPDATE_DNS
     uint32_t ap_dns_addr = 0;
+#endif
     while (1) {
 
 #if !defined(CONFIG_EXAMPLE_ENTER_PPP_DURING_INIT) || defined(CONFIG_MODEM_SUPPORT_SECONDARY_AT_PORT)
@@ -307,4 +320,5 @@ void app_main(void)
 #endif
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
+    modem_board_deinit();
 }

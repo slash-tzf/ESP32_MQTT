@@ -9,6 +9,8 @@ set(SOURCES
     "data_manager/data_model.c"
     "http_server/modem_http_config.c"
     "time/time_sync.c"
+    "network_manager/network_manager.c"
+    "network_manager/wifi_manager.c"
 )
 
 set(INCLUDES
@@ -21,6 +23,7 @@ set(INCLUDES
     "data_manager"
     "http_server"
     "time"
+    "network_manager"
 )
 
 idf_component_register(SRCS ${SOURCES}

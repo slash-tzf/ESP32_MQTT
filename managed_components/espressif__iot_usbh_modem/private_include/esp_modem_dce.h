@@ -37,7 +37,7 @@ typedef enum {
 typedef esp_err_t (*dce_command_t)(esp_modem_dce_t *dce, void *param, void *result);
 
 /**
- * @brief Type of line handlers called fro DTE upon line response reception
+ * @brief Type of line handlers called from DTE upon line response reception
  */
 typedef esp_err_t (*esp_modem_dce_handle_line_t)(esp_modem_dce_t *dce, const char *line);
 
@@ -112,7 +112,6 @@ esp_err_t esp_modem_process_command_done(esp_modem_dce_t *dce, esp_modem_state_t
  */
 esp_err_t esp_modem_dce_handle_response_default(esp_modem_dce_t *dce, const char *line);
 
-
 // DCE higher level commands
 /**
  * @brief Set Working Mode
@@ -173,19 +172,17 @@ esp_err_t esp_modem_dce_default_init(esp_modem_dce_t *dce, esp_modem_dce_config_
  */
 esp_err_t esp_modem_dce_set_params(esp_modem_dce_t *dce, esp_modem_dce_config_t* config);
 
-
 /**
- * @brief Change PDP context APN, will takes effect after redial-up, redial-up will execute if force_enable is true,  
+ * @brief Change PDP context APN, will takes effect after redial-up, redial-up will execute if force_enable is true,
  *
  * @param dce Modem DCE object
  * @param new_apn Access point name
- * @param force_enable if force enbale
+ * @param force_enable if force enable
  * @return esp_err_t
  *      - ESP_OK on success
  *      - ESP_FAIL on error
  */
 esp_err_t esp_modem_dce_set_apn(esp_modem_dce_t *dce, const char *new_apn);
-
 
 // list command operations
 /**

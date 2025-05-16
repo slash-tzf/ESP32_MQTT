@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -35,7 +35,7 @@ typedef enum {
         .tx_buffer_size = 1024*15,   \
         .line_buffer_size = 1600,    \
         .event_task_priority = CONFIG_USBH_TASK_BASE_PRIORITY + 1,\
-        .event_task_stack_size = 3072\
+        .event_task_stack_size = 8192\
     }
 
 #define MODEM_FLAGS_INIT_NOT_FORCE_RESET   (1UL<< 1)   /*!< If set, will not reset 4g modem using reset pin during init */
@@ -60,6 +60,15 @@ typedef struct {
  * @return ** esp_err_t
  */
 esp_err_t modem_board_init(modem_config_t *config);
+
+/**
+ * @brief Deinit all about the modem object
+ *
+ * @return
+ *      - ESP_ERR_INVALID_STATE
+ *      - ESP_OK
+ */
+esp_err_t modem_board_deinit(void);
 
 /**
  * @brief Get the DNS information of modem ppp interface

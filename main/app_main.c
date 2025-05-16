@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -24,12 +25,13 @@
 #include "sensors.h"
 #include "data_model.h"
 #include "time_sync.h"
-
+#include "network_manager.h"
+#include "wifi_manager.h"
 #ifdef CONFIG_EXAMPLE_ENABLE_WEB_ROUTER
     #include "modem_http_config.h"
 #endif
 static const char *TAG = "app_main";
-static modem_wifi_config_t s_modem_wifi_config = MODEM_WIFI_DEFAULT_CONFIG();
+static modem_wifi_config_t wifi_AP_config = MODEM_WIFI_DEFAULT_CONFIG();
 
 
 // 数据汇总任务，定期将所有数据整合发送
@@ -50,6 +52,7 @@ static void data_publish_task(void *pvParameter)
     }
 }
 
+
 void app_main(void)
 {
     /* Initialize led indicator */
@@ -69,17 +72,27 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // 初始化4G模块
-    modem_4g_init();
+    // 初始化网络管理器
+    ESP_ERROR_CHECK(network_manager_init());
     
-#ifdef CONFIG_EXAMPLE_ENABLE_WEB_ROUTER
-    modem_http_get_nvs_wifi_config(&s_modem_wifi_config);
-    modem_http_init(&s_modem_wifi_config);
-#endif
-    esp_netif_t *ap_netif = modem_wifi_ap_init();
-    assert(ap_netif != NULL);
-    ESP_ERROR_CHECK(modem_wifi_set(&s_modem_wifi_config));
+    // 初始化按钮处理
+    ESP_ERROR_CHECK(network_manager_init_button());
 
+    network_mode_t current_mode = network_manager_get_mode();
+
+    if (current_mode == NETWORK_MODE_4G) {
+        // 初始化4G模块
+        modem_4g_init();
+        esp_netif_t *ap_netif = modem_wifi_ap_init();
+        assert(ap_netif != NULL);
+        ESP_ERROR_CHECK(modem_wifi_set(&wifi_AP_config));
+    } else if (current_mode == NETWORK_MODE_WIFI_STA_AP) {
+        // 初始化WiFi STA AP模式
+        wifi_apsta_init(&wifi_AP_config);
+    }
+    
+    //modem_http_get_nvs_wifi_config(&wifi_AP_config);
+    modem_http_init(&wifi_AP_config);
     // 初始化时间同步
     time_sync_init();
 

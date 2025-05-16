@@ -31,8 +31,8 @@ typedef struct {
 #endif
 
 /**
- * @brief  Broadcast SSID or not, default 0, broadcast the SSID 
- * 
+ * @brief  Broadcast SSID or not, default 0, broadcast the SSID
+ *
  */
 #define MODEM_WIFI_DEFAULT_CONFIG()               \
 {                                                 \
@@ -40,15 +40,15 @@ typedef struct {
     .ssid = CONFIG_MODEM_WIFI_SSID,               \
     .password = CONFIG_MODEM_WIFI_PASSWORD,       \
     .channel = CONFIG_MODEM_WIFI_CHANNEL,         \
-    .max_connection = CONFIG_MODEM_WIFI_MAX_STA,\
+    .max_connection = CONFIG_MODEM_WIFI_MAX_STA,  \
     .ssid_hidden = 0,                             \
     .authmode = WIFI_AUTH_WPA_WPA2_PSK,           \
-    .bandwidth = MODEM_WIFI_BANDWIFTH,                    \
+    .bandwidth = MODEM_WIFI_BANDWIFTH,            \
 }
 
 /**
  * @brief Initializes the ESP32's Wi-Fi
- * 
+ *
  * @param mode Wi-Fi work mode
  * @return pointer to an esp_netif_t object.
  */

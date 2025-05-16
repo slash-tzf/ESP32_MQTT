@@ -12,9 +12,9 @@
 <body>
   <div class="home-base">
     <div class="header-base flex flex-jcb">
-        <img class="header-logo" src="./img/logoBlack.png">
-        <div class="header-menu" onclick="menuClick(this)">
-        </div>
+      <img class="header-logo" src="./img/logoBlack.png">
+      <div class="header-menu" onclick="menuClick(this)">
+      </div>
     </div>
     <div class="content-base flex">
       <div class="left-base" id="leftMenu">
@@ -24,6 +24,9 @@
           </li>
           <li>
             <a href="wlan.html">WLAN设置</a>
+          </li>
+          <li>
+            <a href="wifi_sta.html">WiFi STA设置</a>
           </li>
           <li>
             <a href="sensors.html" class="content">传感器数据</a>
@@ -37,60 +40,60 @@
         <div class="page-content">
           <div class="page-title">环境传感器数据</div>
           <div class="device-detail">
-              <div class="device-status-one flex flex-jcb">
-                  <div class="device-temperature">
-                      <span>温度</span>
-                      <span class="device-content" id="temperature">--°C</span>
-                  </div>
-                  <div class="device-humidity">
-                      <span>湿度</span>
-                      <span class="device-content" id="humidity">--%</span>
-                  </div>
+            <div class="device-status-one flex flex-jcb">
+              <div class="device-temperature">
+                <span>温度</span>
+                <span class="device-content" id="temperature">--°C</span>
               </div>
-              <div class="device-status-two flex flex-jcb">
-                  <div class="device-light">
-                      <span>光照强度</span>
-                      <span class="device-content" id="light-intensity">--lx</span>
-                  </div>
-                  <div class="device-update-time">
-                      <span>更新时间</span>
-                      <span class="device-content" id="sensors-update-time">--:--:--</span>
-                  </div>
+              <div class="device-humidity">
+                <span>湿度</span>
+                <span class="device-content" id="humidity">--%</span>
               </div>
+            </div>
+            <div class="device-status-two flex flex-jcb">
+              <div class="device-light">
+                <span>光照强度</span>
+                <span class="device-content" id="light-intensity">--lx</span>
+              </div>
+              <div class="device-update-time">
+                <span>更新时间</span>
+                <span class="device-content" id="sensors-update-time">--:--:--</span>
+              </div>
+            </div>
           </div>
-          
+
           <div class="page-title">GPS位置信息</div>
           <div class="device-detail">
-              <div class="device-status-one flex flex-jcb">
-                  <div class="device-latitude">
-                      <span>纬度</span>
-                      <span class="device-content" id="latitude">--°</span>
-                  </div>
-                  <div class="device-longitude">
-                      <span>经度</span>
-                      <span class="device-content" id="longitude">--°</span>
-                  </div>
+            <div class="device-status-one flex flex-jcb">
+              <div class="device-latitude">
+                <span>纬度</span>
+                <span class="device-content" id="latitude">--°</span>
               </div>
-              <div class="device-status-two flex flex-jcb">
-                  <div class="device-altitude">
-                      <span>海拔高度</span>
-                      <span class="device-content" id="altitude">--米</span>
-                  </div>
-                  <div class="device-speed">
-                      <span>速度</span>
-                      <span class="device-content" id="speed">--节</span>
-                  </div>
+              <div class="device-longitude">
+                <span>经度</span>
+                <span class="device-content" id="longitude">--°</span>
               </div>
-              <div class="device-status-three flex flex-jcb">
-                  <div class="device-course">
-                      <span>航向</span>
-                      <span class="device-content" id="course">--°</span>
-                  </div>
-                  <div class="device-data-source">
-                      <span>数据来源</span>
-                      <span class="device-content" id="data-source">--</span>
-                  </div>
+            </div>
+            <div class="device-status-two flex flex-jcb">
+              <div class="device-altitude">
+                <span>海拔高度</span>
+                <span class="device-content" id="altitude">--米</span>
               </div>
+              <div class="device-speed">
+                <span>速度</span>
+                <span class="device-content" id="speed">--节</span>
+              </div>
+            </div>
+            <div class="device-status-three flex flex-jcb">
+              <div class="device-course">
+                <span>航向</span>
+                <span class="device-content" id="course">--°</span>
+              </div>
+              <div class="device-data-source">
+                <span>数据来源</span>
+                <span class="device-content" id="data-source">--</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -99,4 +102,4 @@
   <script src="js/sensors.js"></script>
 </body>
 
-</html> 
+</html>

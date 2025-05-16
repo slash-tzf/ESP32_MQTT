@@ -205,3 +205,37 @@ esp_mqtt_client_handle_t mqtt_get_client(void)
 {
     return s_mqtt_client;
 }
+
+esp_err_t mqtt_reconnect(void)
+{
+    ESP_LOGI(TAG, "尝试重新连接MQTT客户端");
+    
+    // 如果客户端存在，先停止它
+    if (s_mqtt_client != NULL) {
+        ESP_LOGI(TAG, "停止当前MQTT连接");
+        esp_err_t err = esp_mqtt_client_stop(s_mqtt_client);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "停止MQTT客户端失败: %s", esp_err_to_name(err));
+            // 继续执行，不返回错误
+        }
+        
+        // 销毁旧的客户端
+        err = esp_mqtt_client_destroy(s_mqtt_client);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "销毁MQTT客户端失败: %s", esp_err_to_name(err));
+            // 继续执行，不返回错误
+        }
+        
+        s_mqtt_client = NULL;
+    }
+    
+    // 重新创建并启动客户端
+    s_mqtt_client = mqtt_app_start();
+    if (s_mqtt_client == NULL) {
+        ESP_LOGE(TAG, "重新创建MQTT客户端失败");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "MQTT客户端重新连接成功");
+    return ESP_OK;
+}
