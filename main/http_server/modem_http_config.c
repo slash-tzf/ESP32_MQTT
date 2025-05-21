@@ -26,6 +26,8 @@
 #include "modem_http_config.h"
 #include "data_model.h"
 #include "network_manager.h"
+#include "mqtt.h"
+#include "cJSON.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -1179,6 +1181,228 @@ static esp_err_t network_mode_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* MQTT主题列表处理函数 */
+static esp_err_t mqtt_topics_get_handler(httpd_req_t *req)
+{
+    char resp_str[512];
+    char topics[MAX_MQTT_TOPICS][64];
+    int topic_count = 0;
+
+    // 获取已订阅的主题列表
+    esp_err_t ret = mqtt_get_subscribed_topics(topics, MAX_MQTT_TOPICS, &topic_count);
+    if (ret != ESP_OK) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"获取主题列表失败\"}");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    // 创建JSON响应
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", true);
+    
+    cJSON *topics_array = cJSON_AddArrayToObject(root, "topics");
+    for (int i = 0; i < topic_count; i++) {
+        cJSON_AddItemToArray(topics_array, cJSON_CreateString(topics[i]));
+    }
+
+    char *json_str = cJSON_Print(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    cJSON_Delete(root);
+    free(json_str);
+    
+    return ESP_OK;
+}
+
+/* 添加MQTT主题处理函数 */
+static esp_err_t mqtt_topic_add_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = malloc(total_len + 1);
+    if (buf == NULL) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    int received = 0;
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            free(buf);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    
+    char resp_str[256];
+    
+    if (root == NULL) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的JSON数据\"}");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    cJSON *topic_json = cJSON_GetObjectItem(root, "topic");
+    if (!cJSON_IsString(topic_json) || (topic_json->valuestring == NULL)) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的主题\"}");
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    // 添加并订阅主题
+    esp_err_t ret = mqtt_subscribe_topic(topic_json->valuestring, true);
+    cJSON_Delete(root);
+    
+    if (ret == ESP_OK) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":true,\"message\":\"主题添加成功\"}");
+    } else if (ret == ESP_ERR_NO_MEM) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"主题数量已达上限\"}");
+    } else {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"主题添加失败\"}");
+    }
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp_str, strlen(resp_str));
+    
+    return ESP_OK;
+}
+
+/* 删除MQTT主题处理函数 */
+static esp_err_t mqtt_topic_delete_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = malloc(total_len + 1);
+    if (buf == NULL) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    int received = 0;
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            free(buf);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    
+    char resp_str[256];
+    
+    if (root == NULL) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的JSON数据\"}");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    cJSON *topic_json = cJSON_GetObjectItem(root, "topic");
+    if (!cJSON_IsString(topic_json) || (topic_json->valuestring == NULL)) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的主题\"}");
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    // 取消订阅并删除主题
+    esp_err_t ret = mqtt_unsubscribe_topic(topic_json->valuestring, true);
+    cJSON_Delete(root);
+    
+    if (ret == ESP_OK) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":true,\"message\":\"主题删除成功\"}");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"未找到指定主题\"}");
+    } else {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"主题删除失败\"}");
+    }
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp_str, strlen(resp_str));
+    
+    return ESP_OK;
+}
+
+/* 发布MQTT消息处理函数 */
+static esp_err_t mqtt_publish_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = malloc(total_len + 1);
+    if (buf == NULL) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    int received = 0;
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            free(buf);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    
+    char resp_str[256];
+    
+    if (root == NULL) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的JSON数据\"}");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    cJSON *topic_json = cJSON_GetObjectItem(root, "topic");
+    cJSON *message_json = cJSON_GetObjectItem(root, "message");
+    
+    if (!cJSON_IsString(topic_json) || (topic_json->valuestring == NULL) || 
+        !cJSON_IsString(message_json) || (message_json->valuestring == NULL)) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"无效的主题或消息\"}");
+        cJSON_Delete(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp_str, strlen(resp_str));
+        return ESP_OK;
+    }
+
+    // 发布消息
+    esp_err_t ret = mqtt_publish_message(topic_json->valuestring, message_json->valuestring, 1);  // QoS 1
+    cJSON_Delete(root);
+    
+    if (ret == ESP_OK) {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":true,\"message\":\"消息发布成功\"}");
+    } else {
+        snprintf(resp_str, sizeof(resp_str), "{\"success\":false,\"message\":\"消息发布失败\"}");
+    }
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp_str, strlen(resp_str));
+    
+    return ESP_OK;
+}
+
 static httpd_uri_t wlan_general = {
     .uri = "/wlan_general",
     .method = HTTP_GET,
@@ -1279,6 +1503,34 @@ static httpd_uri_t network_mode_get = {
     .user_ctx = NULL
 };
 
+static httpd_uri_t mqtt_topics_uri = {
+    .uri       = "/api/mqtt/topics",
+    .method    = HTTP_GET,
+    .handler   = mqtt_topics_get_handler,
+    .user_ctx  = NULL
+};
+
+static httpd_uri_t mqtt_add_topic_uri = {
+    .uri       = "/api/mqtt/topics/add",
+    .method    = HTTP_POST,
+    .handler   = mqtt_topic_add_handler,
+    .user_ctx  = NULL
+};
+
+static httpd_uri_t mqtt_delete_topic_uri = {
+    .uri       = "/api/mqtt/topics/delete",
+    .method    = HTTP_POST,
+    .handler   = mqtt_topic_delete_handler,
+    .user_ctx  = NULL
+};
+
+static httpd_uri_t mqtt_publish_uri = {
+    .uri       = "/api/mqtt/publish",
+    .method    = HTTP_POST,
+    .handler   = mqtt_publish_handler,
+    .user_ctx  = NULL
+};
+
 static httpd_handle_t start_webserver(const char *base_path)
 {
     ctx_info_t *ctx_info = calloc(1, sizeof(ctx_info_t));
@@ -1294,7 +1546,7 @@ static httpd_handle_t start_webserver(const char *base_path)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 15;
+    config.max_uri_handlers = 20;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -1331,6 +1583,14 @@ static httpd_handle_t start_webserver(const char *base_path)
         httpd_register_uri_handler(server, &wifi_sta_post);
         network_mode_get.user_ctx = ctx_info;
         httpd_register_uri_handler(server, &network_mode_get);
+
+        httpd_register_uri_handler(server, &mqtt_topics_uri);
+        
+        httpd_register_uri_handler(server, &mqtt_add_topic_uri);
+        
+        httpd_register_uri_handler(server, &mqtt_delete_topic_uri);
+        
+        httpd_register_uri_handler(server, &mqtt_publish_uri);
         
         httpd_uri_t common_get_uri = {
             .uri = "/*",
@@ -1429,7 +1689,7 @@ static esp_err_t init_fs(void)
         .base_path = CONFIG_EXAMPLE_WEB_MOUNT_POINT,
         .partition_label = NULL,
         /*Maximum files that could be open at the same time.*/
-        .max_files = 1,
+        .max_files = 5,
         .format_if_mount_failed = true
     };
     /*Register and mount SPIFFS to VFS with given path prefix.*/

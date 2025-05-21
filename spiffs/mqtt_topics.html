@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0">
+  <title>ESP-MQTT主题</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="./img/favicon.ico">
+</head>
+
+<body>
+  <div class="home-base">
+    <div class="header-base flex flex-jcb">
+      <img class="header-logo" src="./img/logoBlack.png">
+      <div class="header-menu" onclick="menuClick(this)">
+      </div>
+    </div>
+    <div class="content-base flex">
+      <div class="left-base" id="leftMenu">
+        <ul>
+          <li>
+            <a href="index.html">系统状态</a>
+          </li>
+          <li>
+            <a href="wlan.html">WLAN设置</a>
+          </li>
+          <li>
+            <a href="wifi_sta.html">WiFi STA设置</a>
+          </li>
+          <li>
+            <a href="sensors.html">传感器数据</a>
+          </li>
+          <li>
+            <a href="mqtt_topics.html" class="content">MQTT主题管理</a>
+          </li>
+        </ul>
+      </div>
+      <div class="right-base">
+        <div class="page-header">
+          <span class="header-title-one" onclick="showSubscribeTopics()">订阅主题</span>
+          <span>/</span>
+          <span class="header-title-two" onclick="showPublishPanel()">发布消息</span>
+        </div>
+
+        <!-- 订阅主题面板 -->
+        <div class="page-content" id="subscribeTopicsPanel">
+          <div class="page-title">已订阅主题</div>
+          <div class="page-detail">
+            <table class="tableStyle tCenter">
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>主题</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="topicsList"></tbody>
+            </table>
+          </div>
+          
+          <div class="page-title">添加订阅主题</div>
+          <div class="form-group">
+            <div class="form-item">
+              <input type="text" id="newTopic" placeholder="输入主题名称">
+              <button class="btn-primary" onclick="addTopic()">添加</button>
+            </div>
+            <div class="error-message" id="topicError"></div>
+          </div>
+        </div>
+
+        <!-- 发布消息面板 -->
+        <div class="page-content" id="publishPanel" style="display: none;">
+          <div class="page-title">发布消息</div>
+          <div class="form-group">
+            <div class="form-item">
+              <label>目标主题:</label>
+              <input type="text" id="publishTopic" placeholder="输入发布的主题名称">
+            </div>
+            <div class="form-item">
+              <label>消息内容:</label>
+              <textarea id="publishMessage" placeholder="输入要发布的消息内容" rows="5"></textarea>
+            </div>
+            <div class="form-item">
+              <button class="btn-primary" onclick="publishMessage()">发布</button>
+            </div>
+            <div class="error-message" id="publishError"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="js/mqtt_topics.js"></script>
+</body>
+
+</html> 

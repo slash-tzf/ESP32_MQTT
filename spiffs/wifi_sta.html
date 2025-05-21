@@ -31,7 +31,7 @@
         .line-base .title {
             width: 100px;
             display: inline-block;
-            text-align: right;
+            text-align: center;
             margin-right: 10px;
         }
 
@@ -112,6 +112,9 @@
                     <li>
                         <a href="sensors.html">传感器数据</a>
                     </li>
+                    <li>
+                        <a href="mqtt_topics.html">MQTT主题管理</a>
+                    </li>
                 </ul>
             </div>
             <div class="right-base">
@@ -135,12 +138,12 @@
                             <input class="content" type="password" id="password" placeholder="请输入WiFi密码">
                         </div>
                         <div class="line-base-btn">
-                            <button class="save-btn" onclick="saveWifiConfig()">保存设置</button>
+                            <button class="save-btn" onclick="saveWifiConfig()">保存</button>
                         </div>
                         <div id="result-message" class="message"></div>
 
                         <div class="instruction">
-                            <p>设置保存后，如果当前为WiFi STA模式，将立即尝试连接新的WiFi。</p>
+                            <p>设置保存后，请重启设备连接新的WiFi。</p>
                             <p>您也可以通过双击BOOT键（GPIO0）在4G模式和WiFi STA模式之间切换。</p>
                         </div>
                     </div>
