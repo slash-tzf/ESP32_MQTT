@@ -3,7 +3,7 @@
 #include "mqtt.h"
 #include "esp_log.h"
 #include "json_wrapper.h"
-
+#include "ota.h"
 static const char *TAG = "MQTT";
 
 #define MQTT_BROKER_URI         CONFIG_MQTT_BROKER_URI
@@ -12,6 +12,7 @@ static const char *TAG = "MQTT";
 #define MQTT_SUBSCRIBE_TOPIC    CONFIG_MQTT_SUBSCRIBE_TOPIC
 #define MQTT_PUBLISH_TOPIC      CONFIG_MQTT_PUBLISH_TOPIC
 #define MQTT_PUBLISH_DATA_TOPIC CONFIG_MQTT_DATA_TOPIC
+#define MQTT_OTA_TOPIC          CONFIG_MQTT_OTA_TOPIC
 
 #define JSON_BUFFER_SIZE        2048
 
@@ -43,8 +44,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe(client, MQTT_SUBSCRIBE_TOPIC, 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+        esp_mqtt_client_subscribe(client, MQTT_SUBSCRIBE_TOPIC, 0);
+        esp_mqtt_client_subscribe(client, MQTT_OTA_TOPIC, 0);
+        ESP_LOGI(TAG, "Subscribed to topics: %s, %s", MQTT_SUBSCRIBE_TOPIC, MQTT_OTA_TOPIC);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -65,6 +67,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
         printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
         printf("DATA=%.*s\r\n", event->data_len, event->data);
+        if (strncmp(event->topic, MQTT_OTA_TOPIC, strlen(MQTT_OTA_TOPIC)) == 0) {
+            mqtt_ota_handler((const char*)event->data, event->data_len);
+        }
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");

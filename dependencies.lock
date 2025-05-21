@@ -156,16 +156,6 @@ dependencies:
     source:
       type: idf
     version: 5.4.1
-  igrr/libnmea:
-    component_hash: d6e78e853e75882c17cd4f200d110b84824e728cefbb84152227f0f4f98d8a50
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.2'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.2.1
 direct_dependencies:
 - achimpieters/esp32-dht
 - espressif/bh1750
@@ -177,7 +167,6 @@ direct_dependencies:
 - espressif/led_indicator
 - espressif/led_strip
 - idf
-- igrr/libnmea
-manifest_hash: 414c186bab346ebbb59fc328217eb87bfb53c0527e4ecac566cd4d5b37e29a34
+manifest_hash: a8ed64be81159553d2452eb595819a26e6d210a881b3d78a52f756c38a6499a5
 target: esp32s3
 version: 2.0.0

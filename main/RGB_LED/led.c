@@ -22,8 +22,8 @@ static led_strip_handle_t configure_led(void)
         // set the color order of the strip: GRB
         .color_component_format = {
             .format = {
-                .r_pos = 1, // red is the second byte in the color data
-                .g_pos = 0, // green is the first byte in the color data
+                .r_pos = 0, // red is the second byte in the color data
+                .g_pos = 1, // green is the first byte in the color data
                 .b_pos = 2, // blue is the third byte in the color data
                 .num_components = 3, // total 3 color components
             },
@@ -54,7 +54,6 @@ void _led_indicator_init()
     led_strip = configure_led();
 }
 
-// 在 led.c 中实现
 void led_set_color(uint8_t r, uint8_t g, uint8_t b)
 {
     ESP_ERROR_CHECK(led_strip_set_pixel(led_strip, 0, r, g, b));

@@ -11,6 +11,7 @@ set(SOURCES
     "time/time_sync.c"
     "network_manager/network_manager.c"
     "network_manager/wifi_manager.c"
+    "OTA/ota.c"
 )
 
 set(INCLUDES
@@ -24,6 +25,7 @@ set(INCLUDES
     "http_server"
     "time"
     "network_manager"
+    "OTA"
 )
 
 idf_component_register(SRCS ${SOURCES}

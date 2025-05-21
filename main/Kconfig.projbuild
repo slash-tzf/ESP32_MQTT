@@ -134,6 +134,11 @@ menu "4G Modem Example Config"
             default "esp32/data"
             help
                 用于发布传感器和GPS数据的MQTT主题
+        config MQTT_OTA_TOPIC
+            string "MQTT OTA topic"
+            default "esp32/ota"
+            help
+                OTA消息的MQTT主题
     endmenu
 endmenu
 

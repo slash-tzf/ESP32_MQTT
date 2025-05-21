@@ -6,7 +6,6 @@
 #include "driver/uart.h"
 #include "sdkconfig.h"
 #include "string.h"
-#include "nmea.h"
 #include "esp_idf_version.h"
 #include "esp_log.h"
 #include "gps.h"
@@ -54,32 +53,6 @@ double convert_to_decimal_degrees(double coord_ddmm)
     int degrees = (int)(coord_ddmm / 100.0);
     double minutes = coord_ddmm - degrees * 100.0;
     return degrees + minutes / 60.0;
-}
-
-/**
- * 将GPS坐标格式化为单个字符串，格式为：纬度°N/S,经度°E/W
- * 例如：23.1234°N,45.5678°E
- * 
- * @param latitude GPS纬度数据结构
- * @param longitude GPS经度数据结构
- * @param buffer 输出字符串缓冲区
- * @param buffer_size 缓冲区大小
- * @return 格式化后的字符串长度
- */
-int format_gps_position(const nmea_position *latitude, const nmea_position *longitude, char *buffer, size_t buffer_size)
-{
-    if (!latitude || !longitude || !buffer || buffer_size == 0) {
-        return 0;
-    }
-     
-     // 计算完整的度数（度+分/60）
-    double lat_decimal = latitude->degrees + (latitude->minutes / 60.0);
-    double lon_decimal = longitude->degrees + (longitude->minutes / 60.0);
-     
-     // 格式化为字符串
-    return snprintf(buffer, buffer_size, "%.6f°%c,%.6f°%c", 
-                    lat_decimal, (char)latitude->cardinal,
-                    lon_decimal, (char)longitude->cardinal);
 }
 
 
@@ -291,7 +264,7 @@ int parse_lbs_info(const char *line, gps_info_t *gps_info)
     // 解析经纬度（注意LBS返回的是十进制格式，不是度分格式）
     double latitude = atof(tokens[1]);
     double longitude = atof(tokens[2]);
-    int accuracy = atoi(tokens[3]);
+    //int accuracy = atoi(tokens[3]);
     
     // 填充GPS信息结构体
     memset(gps_info, 0, sizeof(gps_info_t)); // 先清空结构体

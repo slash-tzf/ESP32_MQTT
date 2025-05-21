@@ -27,6 +27,7 @@
 #include "time_sync.h"
 #include "network_manager.h"
 #include "wifi_manager.h"
+#include "ota.h"
 #ifdef CONFIG_EXAMPLE_ENABLE_WEB_ROUTER
     #include "modem_http_config.h"
 #endif
@@ -36,7 +37,7 @@ static modem_wifi_config_t wifi_AP_config = MODEM_WIFI_DEFAULT_CONFIG();
 
 // 数据汇总任务，定期将所有数据整合发送
 static void data_publish_task(void *pvParameter)
-{
+{ 
     esp_mqtt_client_handle_t mqtt_client = (esp_mqtt_client_handle_t)pvParameter;
     data_model_t *data_model = data_model_get_latest();
     
@@ -55,6 +56,8 @@ static void data_publish_task(void *pvParameter)
 
 void app_main(void)
 {
+    // 系统检查
+    run_diagnostic();
     /* Initialize led indicator */
     _led_indicator_init();
     
@@ -90,9 +93,9 @@ void app_main(void)
         // 初始化WiFi STA AP模式
         wifi_apsta_init(&wifi_AP_config);
     }
-    
-    //modem_http_get_nvs_wifi_config(&wifi_AP_config);
+    // 初始化http服务
     modem_http_init(&wifi_AP_config);
+
     // 初始化时间同步
     time_sync_init();
 

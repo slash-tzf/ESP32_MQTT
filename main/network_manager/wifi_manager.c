@@ -4,9 +4,9 @@
 #include "esp_netif.h"
 #include "esp_mac.h"
 #include "esp_event.h"
-#include "esp_system.h"
 #include "freertos/event_groups.h"
 #include <string.h>
+#include "led.h"
 
 // 外部变量，用于从network_manager.c获取WiFi配置
 extern char wifi_ssid[33];
@@ -27,19 +27,23 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_data;
         ESP_LOGI(TAG, "Station "MACSTR" joined, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        led_set_color(0, 0, 255);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_data;
         ESP_LOGI(TAG, "Station "MACSTR" left, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        led_set_color(0, 0, 0);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "连接断开，尝试重新连接...");
         esp_wifi_connect();
+        led_set_color(255, 0, 0);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
         ESP_LOGI(TAG, "获取IP地址:" IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        led_set_color(0,128,0);
     }
 }
 
