@@ -133,7 +133,7 @@ function initPage() {
     
     // 开始定时更新数据
     updateSensorsData();
-    getSensorsTimer = setInterval(updateSensorsData, 3000);
+    getSensorsTimer = setInterval(updateSensorsData, 10000);
 }
 
 // 页面加载完成时执行初始化

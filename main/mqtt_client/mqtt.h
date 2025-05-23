@@ -8,12 +8,44 @@
 #define MAX_MQTT_TOPICS         20
 #define MAX_TOPIC_LENGTH        64
 
+// MQTT连接状态
+typedef enum {
+    MQTT_CONNECTION_STATUS_DISCONNECTED = 0,      // 未连接
+    MQTT_CONNECTION_STATUS_CONNECTING,            // 连接中
+    MQTT_CONNECTION_STATUS_CONNECTED,             // 已连接
+    MQTT_CONNECTION_STATUS_FAILED_AUTH,           // 认证失败
+    MQTT_CONNECTION_STATUS_FAILED_SERVER,         // 服务器连接失败
+    MQTT_CONNECTION_STATUS_FAILED_NETWORK,        // 网络连接失败
+    MQTT_CONNECTION_STATUS_FAILED_UNKNOWN         // 未知错误
+} mqtt_connection_status_t;
+
 /**
  * @brief 初始化MQTT客户端并启动
  * 
  * @return esp_mqtt_client_handle_t MQTT客户端句柄
  */
 esp_mqtt_client_handle_t mqtt_app_start(void);
+
+/**
+ * @brief 停止并销毁MQTT客户端
+ * 
+ * @return esp_err_t ESP_OK成功，其他值失败
+ */
+esp_err_t mqtt_app_stop(void);
+
+/**
+ * @brief 获取MQTT连接状态
+ * 
+ * @return mqtt_connection_status_t 当前MQTT连接状态
+ */
+mqtt_connection_status_t mqtt_get_connection_status(void);
+
+/**
+ * @brief 获取MQTT错误信息
+ * 
+ * @return const char* 错误信息字符串，如果没有错误则返回空字符串
+ */
+const char* mqtt_get_error_message(void);
 
 /**
  * @brief 发布数据模型到MQTT主题

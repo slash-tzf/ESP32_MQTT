@@ -23,9 +23,63 @@ static const char *TAG = "MQTT";
 #define NVS_TOPIC_COUNT_KEY     "topic_count"
 #define NVS_TOPIC_KEY_PREFIX    "topic_"
 
+// MQTT配置NVS命名空间和键
+#define NVS_MQTT_CONFIG_NAMESPACE  "mqtt_config"
+#define NVS_MQTT_BROKER_KEY        "mqtt_broker"
+#define NVS_MQTT_USERNAME_KEY      "mqtt_username"
+#define NVS_MQTT_PASSWORD_KEY      "mqtt_password"
+
 static esp_mqtt_client_handle_t s_mqtt_client = NULL;
 static char s_topics[MAX_MQTT_TOPICS][MAX_TOPIC_LENGTH];
 static int s_topic_count = 0;
+static TaskHandle_t data_publish_task_handle = NULL;
+
+// MQTT状态跟踪
+static mqtt_connection_status_t s_mqtt_status = MQTT_CONNECTION_STATUS_DISCONNECTED;
+static char s_mqtt_error_message[256] = {0};
+
+// 获取MQTT连接状态
+mqtt_connection_status_t mqtt_get_connection_status(void)
+{
+    return s_mqtt_status;
+}
+
+// 获取MQTT错误信息
+const char* mqtt_get_error_message(void)
+{
+    return s_mqtt_error_message;
+}
+
+// 重置MQTT错误信息
+static void mqtt_reset_error_message(void)
+{
+    s_mqtt_error_message[0] = '\0';
+}
+
+// 设置MQTT错误信息
+static void mqtt_set_error_message(const char *message)
+{
+    strncpy(s_mqtt_error_message, message, sizeof(s_mqtt_error_message) - 1);
+    s_mqtt_error_message[sizeof(s_mqtt_error_message) - 1] = '\0';
+}
+
+// 数据汇总任务，定期将所有数据整合发送
+static void data_publish_task(void *pvParameter)
+{ 
+    esp_mqtt_client_handle_t mqtt_client = (esp_mqtt_client_handle_t)pvParameter;
+    data_model_t *data_model = data_model_get_latest();
+    
+    while (1) {
+        if (mqtt_client != NULL && data_model != NULL && s_mqtt_status == MQTT_CONNECTION_STATUS_CONNECTED) {
+            // 发布完整数据模型
+            mqtt_publish_data_model(mqtt_client, data_model, NULL);
+            ESP_LOGI(TAG, "已发布完整数据模型到MQTT");
+        }
+        
+        // 每30秒发布一次完整数据
+        vTaskDelay(pdMS_TO_TICKS(30000));
+    }
+}
 
 static void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -53,15 +107,23 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        esp_mqtt_client_subscribe(client, MQTT_SUBSCRIBE_TOPIC, 0);
         esp_mqtt_client_subscribe(client, MQTT_OTA_TOPIC, 0);
-        ESP_LOGI(TAG, "Subscribed to topics: %s, %s", MQTT_SUBSCRIBE_TOPIC, MQTT_OTA_TOPIC);
+        ESP_LOGI(TAG, "Subscribed to topics: %s", MQTT_OTA_TOPIC);
+        
+        // 更新状态为已连接
+        s_mqtt_status = MQTT_CONNECTION_STATUS_CONNECTED;
+        mqtt_reset_error_message();
         
         // 加载并订阅保存在NVS中的主题
         mqtt_load_topics_from_nvs();
+        if (data_publish_task_handle == NULL) {
+            xTaskCreate(data_publish_task, "data_publish", 8192, s_mqtt_client, 5, &data_publish_task_handle);
+        }
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        // 更新状态为未连接
+        s_mqtt_status = MQTT_CONNECTION_STATUS_DISCONNECTED;
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -89,7 +151,30 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+            
+            // 网络连接错误
+            s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_NETWORK;
+            snprintf(s_mqtt_error_message, sizeof(s_mqtt_error_message), 
+                     "网络连接错误: %s", strerror(event->error_handle->esp_transport_sock_errno));
         }
+        if(event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED){
+            ESP_LOGI(TAG, "MQTT_EVENT_ERROR: MQTT_ERROR_TYPE_CONNECTION_REFUSED");
+            
+            // 服务器拒绝连接
+            s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_SERVER;
+            mqtt_set_error_message("MQTT服务器拒绝连接");
+        }
+        if(event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_BAD_USERNAME ||
+           event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED) {
+            // 身份验证失败
+            s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_AUTH;
+            mqtt_set_error_message("MQTT身份验证失败");
+        }
+        break;
+    case MQTT_EVENT_BEFORE_CONNECT:
+        ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT");
+        // 更新状态为连接中
+        s_mqtt_status = MQTT_CONNECTION_STATUS_CONNECTING;
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
@@ -97,12 +182,79 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
+esp_err_t mqtt_app_stop(void)
+{
+    if (data_publish_task_handle != NULL) {
+        vTaskDelete(data_publish_task_handle);
+        data_publish_task_handle = NULL;
+    }
+
+        // 如果客户端存在，先停止它
+    if (s_mqtt_client != NULL) {
+        ESP_LOGI(TAG, "停止当前MQTT连接");
+        esp_err_t err = esp_mqtt_client_stop(s_mqtt_client);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "停止MQTT客户端失败: %s", esp_err_to_name(err));
+            return err;
+        }
+        
+        // 销毁旧的客户端
+        err = esp_mqtt_client_destroy(s_mqtt_client);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "销毁MQTT客户端失败: %s", esp_err_to_name(err));
+            return err;
+        }
+        
+        s_mqtt_client = NULL;
+    }
+
+    return ESP_OK;
+}
+
 esp_mqtt_client_handle_t mqtt_app_start(void)
 {
+    // 从NVS中读取MQTT配置参数
+    char broker[128] = MQTT_BROKER_URI;  // 默认使用编译时配置
+    char username[64] = MQTT_BROKER_USERNAME;
+    char password[64] = MQTT_BROKER_PASSWORD;
+    
+    // 打开NVS
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_MQTT_CONFIG_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err == ESP_OK) {
+        // 读取Broker地址
+        size_t broker_len = sizeof(broker);
+        err = nvs_get_str(nvs_handle, NVS_MQTT_BROKER_KEY, broker, &broker_len);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "已从NVS加载MQTT Broker: %s", broker);
+        }
+        
+        // 读取用户名
+        size_t username_len = sizeof(username);
+        err = nvs_get_str(nvs_handle, NVS_MQTT_USERNAME_KEY, username, &username_len);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "已从NVS加载MQTT用户名: %s", username);
+        }
+        
+        // 读取密码
+        size_t password_len = sizeof(password);
+        err = nvs_get_str(nvs_handle, NVS_MQTT_PASSWORD_KEY, password, &password_len);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "已从NVS加载MQTT密码");
+        }
+        
+        // 关闭NVS
+        nvs_close(nvs_handle);
+    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI(TAG, "MQTT配置命名空间不存在，使用默认配置");
+    } else {
+        ESP_LOGW(TAG, "打开MQTT配置NVS失败: %s", esp_err_to_name(err));
+    }
+
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = MQTT_BROKER_URI,
-        .credentials.username = MQTT_BROKER_USERNAME,
-        .credentials.authentication.password = MQTT_BROKER_PASSWORD,
+        .broker.address.uri = broker,
+        .credentials.username = username,
+        .credentials.authentication.password = password,
         //.session.protocol_ver = MQTT_PROTOCOL_V_5,
         // .credentials.client_id = "ESP32-bupt",
     };
@@ -110,8 +262,16 @@ esp_mqtt_client_handle_t mqtt_app_start(void)
     s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(s_mqtt_client);
+    err = esp_mqtt_client_start(s_mqtt_client);
     
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "MQTT客户端启动失败: %s", esp_err_to_name(err));
+        s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_UNKNOWN;
+        mqtt_set_error_message("MQTT客户端启动失败");
+        return NULL;
+    }
+    
+    ESP_LOGI(TAG, "MQTT客户端启动成功");
     return s_mqtt_client;
 }
 
@@ -226,33 +386,15 @@ esp_err_t mqtt_reconnect(void)
 {
     ESP_LOGI(TAG, "尝试重新连接MQTT客户端");
     
-    // 如果客户端存在，先停止它
-    if (s_mqtt_client != NULL) {
-        ESP_LOGI(TAG, "停止当前MQTT连接");
-        esp_err_t err = esp_mqtt_client_stop(s_mqtt_client);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "停止MQTT客户端失败: %s", esp_err_to_name(err));
-            // 继续执行，不返回错误
-        }
-        
-        // 销毁旧的客户端
-        err = esp_mqtt_client_destroy(s_mqtt_client);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "销毁MQTT客户端失败: %s", esp_err_to_name(err));
-            // 继续执行，不返回错误
-        }
-        
-        s_mqtt_client = NULL;
-    }
+    mqtt_app_stop();
     
     // 重新创建并启动客户端
     s_mqtt_client = mqtt_app_start();
     if (s_mqtt_client == NULL) {
-        ESP_LOGE(TAG, "重新创建MQTT客户端失败");
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "MQTT客户端重新连接成功");
+
     return ESP_OK;
 }
 
@@ -303,7 +445,7 @@ static esp_err_t mqtt_save_topics_to_nvs(void)
     }
     
     nvs_close(nvs_handle);
-    ESP_LOGI(TAG, "成功保存 %d 个主题到NVS", s_topic_count);
+    ESP_LOGI(TAG, "成功同步到NVS");
     return ESP_OK;
 }
 
@@ -529,3 +671,5 @@ esp_err_t mqtt_publish_message(const char *topic, const char *message, int qos)
     ESP_LOGI(TAG, "成功发布消息到主题 %s, msg_id=%d", topic, msg_id);
     return ESP_OK;
 }
+
+

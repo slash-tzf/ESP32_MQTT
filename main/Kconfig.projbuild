@@ -13,20 +13,6 @@ menu "4G Modem Example Config"
         help
             Specify the mount point in VFS.
 
-    config EXAMPLE_WEB_USERNAME
-        string "Default login username"
-        default "esp32"
-        depends on EXAMPLE_ENABLE_WEB_ROUTER
-        help
-            Default username for logging in to the server.
-
-    config EXAMPLE_WEB_PASSWORD
-        string "Default login password"
-        default "12345678"
-        depends on EXAMPLE_ENABLE_WEB_ROUTER
-        help
-            Default password for logging in to the server.
-
     config EXAMPLE_ENTER_PPP_DURING_INIT
         bool "Auto enter ppp mode"
         default y
@@ -136,7 +122,7 @@ menu "4G Modem Example Config"
                 用于发布传感器和GPS数据的MQTT主题
         config MQTT_OTA_TOPIC
             string "MQTT OTA topic"
-            default "esp32/ota"
+            default "sys/ota"
             help
                 OTA消息的MQTT主题
     endmenu
