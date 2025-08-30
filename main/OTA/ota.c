@@ -17,6 +17,8 @@ static const char *TAG = "OTA_API";
 
 
 static char ota_write_data[BUFFSIZE + 1] = { 0 };
+extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 static void http_cleanup(esp_http_client_handle_t client)
 {
@@ -165,7 +167,7 @@ static void ota_task(void *pvParameter)
 
     esp_http_client_config_t config = {
         .url = param->url,
-        //.cert_pem = (char *)server_cert_pem_start,
+        .cert_pem = (char *)server_cert_pem_start,
         .timeout_ms = 5000,
         .keep_alive_enable = true,
     };

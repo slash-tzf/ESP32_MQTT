@@ -3,9 +3,11 @@ const baseurl = window.location.origin
 console.log(baseurl)
 const CONSTANT = {
     GET_SENSORS_URL: `${baseurl}/sensors/data`,
+    GET_GPS_URL: `${baseurl}/sensors/gps`,
 }
 
 var getSensorsTimer = null;
+var getGpsTimer = null;
 
 var Ajax = {
     get: function(url, callback) {
@@ -18,7 +20,8 @@ var Ajax = {
                     console.log(xhr.responseText);
                     callback(xhr.responseText);
                 } else {
-                    console.log(xhr.responseText);
+                    console.log('Error:', xhr.responseText);
+                    callback(null);
                 }
             }
         }
@@ -54,8 +57,14 @@ function showGPS() {
     gpsShow.style.display = 'block';
 }
 
+// 分离的传感器数据更新函数
 function updateSensorsData() {
     Ajax.get(CONSTANT.GET_SENSORS_URL, function(res) {
+        if (!res) {
+            console.error('获取传感器数据失败');
+            return;
+        }
+        
         res = JSON.parse(res);
         console.log('获取传感器信息：', res);
 
@@ -76,6 +85,26 @@ function updateSensorsData() {
             lightIntensity.innerHTML = '--lx';
         }
 
+        // 更新传感器数据时间显示
+        var date = new Date(res.timestamp * 1000);
+        var timeString = date.getHours() + ':' + 
+                          (date.getMinutes() < 10 ? '0' + date.getMinutes() : date.getMinutes()) + ':' + 
+                          (date.getSeconds() < 10 ? '0' + date.getSeconds() : date.getSeconds());
+        sensorsUpdateTime.innerHTML = timeString;
+    });
+}
+
+// 分离的GPS数据更新函数
+function updateGpsData() {
+    Ajax.get(CONSTANT.GET_GPS_URL, function(res) {
+        if (!res) {
+            console.error('获取GPS数据失败');
+            return;
+        }
+        
+        res = JSON.parse(res);
+        console.log('获取GPS信息：', res);
+
         // 更新GPS数据
         var latitude = document.getElementById('latitude');
         var longitude = document.getElementById('longitude');
@@ -83,6 +112,7 @@ function updateSensorsData() {
         var speed = document.getElementById('speed');
         var course = document.getElementById('course');
         var dataSource = document.getElementById('data-source');
+        var gpsUpdateTime = document.getElementById('gps-update-time');
 
         // 检查GPS数据有效性
         if (res.gps_valid) {
@@ -107,12 +137,14 @@ function updateSensorsData() {
             dataSource.innerHTML = '--';
         }
 
-        // 更新时间显示
+        // 更新GPS数据时间显示
+        if (gpsUpdateTime) {
         var date = new Date(res.timestamp * 1000);
         var timeString = date.getHours() + ':' + 
                           (date.getMinutes() < 10 ? '0' + date.getMinutes() : date.getMinutes()) + ':' + 
                           (date.getSeconds() < 10 ? '0' + date.getSeconds() : date.getSeconds());
-        sensorsUpdateTime.innerHTML = timeString;
+            gpsUpdateTime.innerHTML = timeString;
+        }
     });
 }
 
@@ -131,10 +163,27 @@ function menuClick(e) {
 function initPage() {
     console.log('传感器页面初始化');
     
-    // 开始定时更新数据
+    // 立即更新一次数据
     updateSensorsData();
-    getSensorsTimer = setInterval(updateSensorsData, 10000);
+    updateGpsData();
+    
+    // 开始定时更新数据
+    // 传感器数据更新频率：每5秒
+    getSensorsTimer = setInterval(updateSensorsData, 5000);
+    
+    // GPS数据更新频率：每10秒（GPS更新通常比传感器慢）
+    getGpsTimer = setInterval(updateGpsData, 10000);
 }
+
+// 页面卸载时清除定时器
+window.onbeforeunload = function() {
+    if (getSensorsTimer) {
+        clearInterval(getSensorsTimer);
+    }
+    if (getGpsTimer) {
+        clearInterval(getGpsTimer);
+    }
+};
 
 // 页面加载完成时执行初始化
 window.onload = function() {

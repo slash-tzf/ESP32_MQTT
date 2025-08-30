@@ -92,7 +92,7 @@ menu "4G Modem Example Config"
     menu "MQTT Configuration"
         config MQTT_BROKER_URI
             string "MQTT broker URI"
-            default "mqtt://116.62.62.70"
+            default "mqtts://116.62.62.70"
             help
                 MQTT服务器地址，格式为mqtt://hostname:port
         config MQTT_BROKER_USERNAME
@@ -105,21 +105,6 @@ menu "4G Modem Example Config"
             default ""
             help
                 MQTT服务器密码，如不需要可留空
-        config MQTT_SUBSCRIBE_TOPIC
-            string "MQTT subscribe topic"
-            default "esp32/subscribe"
-            help
-                MQTT订阅主题
-        config MQTT_PUBLISH_TOPIC
-            string "MQTT publish topic"
-            default "esp32/publish"
-            help
-                MQTT发布主题
-        config MQTT_DATA_TOPIC
-            string "MQTT data publish topic"
-            default "esp32/data"
-            help
-                用于发布传感器和GPS数据的MQTT主题
         config MQTT_OTA_TOPIC
             string "MQTT OTA topic"
             default "sys/ota"

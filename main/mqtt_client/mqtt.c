@@ -11,9 +11,6 @@ static const char *TAG = "MQTT";
 #define MQTT_BROKER_URI         CONFIG_MQTT_BROKER_URI
 #define MQTT_BROKER_USERNAME    CONFIG_MQTT_BROKER_USERNAME
 #define MQTT_BROKER_PASSWORD    CONFIG_MQTT_BROKER_PASSWORD
-#define MQTT_SUBSCRIBE_TOPIC    CONFIG_MQTT_SUBSCRIBE_TOPIC
-#define MQTT_PUBLISH_TOPIC      CONFIG_MQTT_PUBLISH_TOPIC
-#define MQTT_PUBLISH_DATA_TOPIC CONFIG_MQTT_DATA_TOPIC
 #define MQTT_OTA_TOPIC          CONFIG_MQTT_OTA_TOPIC
 
 #define JSON_BUFFER_SIZE        2048
@@ -37,6 +34,14 @@ static TaskHandle_t data_publish_task_handle = NULL;
 // MQTT状态跟踪
 static mqtt_connection_status_t s_mqtt_status = MQTT_CONNECTION_STATUS_DISCONNECTED;
 static char s_mqtt_error_message[256] = {0};
+
+extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
+
+// 从NVS中读取MQTT配置参数
+static char broker[128] = MQTT_BROKER_URI;  // 默认使用编译时配置
+static char username[64] = MQTT_BROKER_USERNAME;
+static char password[64] = MQTT_BROKER_PASSWORD;
 
 // 获取MQTT连接状态
 mqtt_connection_status_t mqtt_get_connection_status(void)
@@ -103,7 +108,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
@@ -127,8 +131,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        msg_id = esp_mqtt_client_publish(client, MQTT_PUBLISH_TOPIC, "test", 0, 0, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_UNSUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
@@ -154,8 +156,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             // 网络连接错误
             s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_NETWORK;
-            snprintf(s_mqtt_error_message, sizeof(s_mqtt_error_message), 
-                     "网络连接错误: %s", strerror(event->error_handle->esp_transport_sock_errno));
+            mqtt_set_error_message("MQTT网络连接错误");
+            ESP_LOGI(TAG, "MQTT网络连接错误");
         }
         if(event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED){
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR: MQTT_ERROR_TYPE_CONNECTION_REFUSED");
@@ -163,18 +165,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             // 服务器拒绝连接
             s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_SERVER;
             mqtt_set_error_message("MQTT服务器拒绝连接");
+            ESP_LOGI(TAG, "MQTT服务器拒绝连接");
         }
         if(event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_BAD_USERNAME ||
            event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED) {
             // 身份验证失败
             s_mqtt_status = MQTT_CONNECTION_STATUS_FAILED_AUTH;
             mqtt_set_error_message("MQTT身份验证失败");
+            ESP_LOGI(TAG, "MQTT身份验证失败");
         }
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT");
         // 更新状态为连接中
         s_mqtt_status = MQTT_CONNECTION_STATUS_CONNECTING;
+        ESP_LOGI(TAG, "MQTT连接中");
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
@@ -213,10 +218,7 @@ esp_err_t mqtt_app_stop(void)
 
 esp_mqtt_client_handle_t mqtt_app_start(void)
 {
-    // 从NVS中读取MQTT配置参数
-    char broker[128] = MQTT_BROKER_URI;  // 默认使用编译时配置
-    char username[64] = MQTT_BROKER_USERNAME;
-    char password[64] = MQTT_BROKER_PASSWORD;
+
     
     // 打开NVS
     nvs_handle_t nvs_handle;
@@ -255,6 +257,9 @@ esp_mqtt_client_handle_t mqtt_app_start(void)
         .broker.address.uri = broker,
         .credentials.username = username,
         .credentials.authentication.password = password,
+        // .broker.verification.certificate = (const char *)server_cert_pem_start,
+        // .broker.verification.certificate_len = server_cert_pem_end - server_cert_pem_start,
+        // .broker.address.port = 8883,
         //.session.protocol_ver = MQTT_PROTOCOL_V_5,
         // .credentials.client_id = "ESP32-bupt",
     };
@@ -285,7 +290,9 @@ esp_err_t mqtt_publish_data_model(esp_mqtt_client_handle_t client,
     
     // 使用默认主题如果未指定
     if (topic == NULL) {
-        topic = MQTT_PUBLISH_DATA_TOPIC;
+        char default_topic[128];
+        snprintf(default_topic, sizeof(default_topic), "%s/data", username);
+        topic = default_topic;
     }
     
     // 创建JSON字符串缓冲区
@@ -309,73 +316,6 @@ esp_err_t mqtt_publish_data_model(esp_mqtt_client_handle_t client,
     return ESP_OK;
 }
 
-esp_err_t mqtt_publish_sensor_data(esp_mqtt_client_handle_t client, 
-                                  const sensor_data_t *sensor_data, 
-                                  const char *topic)
-{
-    if (client == NULL || sensor_data == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // 使用默认主题如果未指定
-    if (topic == NULL) {
-        topic = MQTT_PUBLISH_DATA_TOPIC "/sensors";
-    }
-    
-    // 创建JSON字符串缓冲区
-    char json_buffer[JSON_BUFFER_SIZE];
-    
-    // 将传感器数据转换为JSON
-    esp_err_t ret = json_generate_from_sensor_data(sensor_data, json_buffer, JSON_BUFFER_SIZE);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "生成传感器JSON数据失败: %d", ret);
-        return ret;
-    }
-    
-    // 发布到MQTT
-    int msg_id = esp_mqtt_client_publish(client, topic, json_buffer, strlen(json_buffer), 1, 0);
-    if (msg_id < 0) {
-        ESP_LOGE(TAG, "发布传感器数据失败");
-        return ESP_FAIL;
-    }
-    
-    ESP_LOGI(TAG, "发布传感器数据成功，msg_id=%d", msg_id);
-    return ESP_OK;
-}
-
-esp_err_t mqtt_publish_gps_data(esp_mqtt_client_handle_t client, 
-                               const gps_data_t *gps_data, 
-                               const char *topic)
-{
-    if (client == NULL || gps_data == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // 使用默认主题如果未指定
-    if (topic == NULL) {
-        topic = MQTT_PUBLISH_DATA_TOPIC "/gps";
-    }
-    
-    // 创建JSON字符串缓冲区
-    char json_buffer[JSON_BUFFER_SIZE];
-    
-    // 将GPS数据转换为JSON
-    esp_err_t ret = json_generate_from_gps_data(gps_data, json_buffer, JSON_BUFFER_SIZE);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "生成GPS JSON数据失败: %d", ret);
-        return ret;
-    }
-    
-    // 发布到MQTT
-    int msg_id = esp_mqtt_client_publish(client, topic, json_buffer, strlen(json_buffer), 1, 0);
-    if (msg_id < 0) {
-        ESP_LOGE(TAG, "发布GPS数据失败");
-        return ESP_FAIL;
-    }
-    
-    ESP_LOGI(TAG, "发布GPS数据成功，msg_id=%d", msg_id);
-    return ESP_OK;
-}
 
 esp_mqtt_client_handle_t mqtt_get_client(void)
 {

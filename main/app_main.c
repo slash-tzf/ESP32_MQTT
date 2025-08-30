@@ -34,7 +34,6 @@ static const char *TAG = "app_main";
 static modem_wifi_config_t wifi_AP_config = MODEM_WIFI_DEFAULT_CONFIG();
 
 
-
 void app_main(void)
 {
     // 系统检查
@@ -66,29 +65,29 @@ void app_main(void)
 
     if (current_mode == NETWORK_MODE_4G) {
         // 初始化4G模块
-        modem_4g_init();
+        
         esp_netif_t *ap_netif = modem_wifi_ap_init();
         assert(ap_netif != NULL);
         ESP_ERROR_CHECK(modem_wifi_set(&wifi_AP_config));
+        modem_http_init(&wifi_AP_config);
+        modem_4g_init();
     } else if (current_mode == NETWORK_MODE_WIFI_STA_AP) {
         // 初始化WiFi STA AP模式
         wifi_apsta_init(&wifi_AP_config);
+        modem_http_init(&wifi_AP_config);
     }
-    // 初始化http服务
-    modem_http_init(&wifi_AP_config);
 
     // 初始化时间同步
     time_sync_init();
 
-
-    
     // 初始化数据模型
     data_model_t *model = NULL;
     model = data_model_get_latest();
     ESP_ERROR_CHECK(data_model_init(model));
 
     // 初始化传感器
-    ESP_ERROR_CHECK(sensors_init());
+    //ESP_ERROR_CHECK(sensors_init());
+    sensors_init();
 
     // 启动GPS模块
     ESP_ERROR_CHECK(gps_start());
@@ -98,6 +97,4 @@ void app_main(void)
     
     // 启动MQTT客户端
     mqtt_app_start();
-    // 创建数据发布任务
-    
 }

@@ -3,7 +3,7 @@ set(SOURCES
     "mqtt_client/mqtt.c"
     "gps/gps.c"
     "4g/modem_4g.c"
-    "RGB_LED/led.c"
+    "rgb_led/led.c"
     "sensors/sensors.c"
     "data_manager/json_wrapper.c"
     "data_manager/data_model.c"
@@ -19,7 +19,7 @@ set(INCLUDES
     "mqtt_client"
     "4g"
     "gps"
-    "RGB_LED"
+    "rgb_led"
     "sensors"
     "data_manager"
     "http_server"
@@ -29,7 +29,8 @@ set(INCLUDES
 )
 
 idf_component_register(SRCS ${SOURCES}
-                INCLUDE_DIRS ${INCLUDES})
+                INCLUDE_DIRS ${INCLUDES}
+                EMBED_TXTFILES ${project_dir}/server_certs/ca_cert.pem)
 
 spiffs_create_partition_image(storage ../spiffs FLASH_IN_PROJECT)
 

@@ -116,7 +116,6 @@ void sensors_task(void *pvParameters)
 {
     float light, temperature, humidity;
     data_model_t *data_model = data_model_get_latest();
-    esp_mqtt_client_handle_t mqtt_client = mqtt_get_client();
     
     while (1) {
         // 读取光照强度
@@ -132,11 +131,6 @@ void sensors_task(void *pvParameters)
         // 更新数据模型
         if (data_model != NULL) {
             sensors_update_data_model(data_model);
-            
-            // 如果MQTT客户端可用，发布数据
-            // if (mqtt_client != NULL) {
-            //     mqtt_publish_sensor_data(mqtt_client, &data_model->sensors, NULL);
-            // }
         }
 
         vTaskDelay(pdMS_TO_TICKS(SENSOR_UPDATE_INTERVAL_MS)); // 每10秒读取一次
@@ -145,7 +139,7 @@ void sensors_task(void *pvParameters)
 
 esp_err_t sensors_task_init(void)
 {
-    BaseType_t ret = xTaskCreate(sensors_task, "sensors_task", 8192, NULL, 5, NULL);
+    BaseType_t ret = xTaskCreate(sensors_task, "sensors_task", 4096, NULL, 5, NULL);
     if (ret != pdPASS) {
         ESP_LOGE(TAG, "传感器任务创建失败");
         return ESP_FAIL;
