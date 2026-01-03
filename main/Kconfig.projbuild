@@ -87,6 +87,47 @@ menu "4G Modem Example Config"
         config BH1750_I2C_FREQ_HZ
             int "BH1750 I2C frequency"
             default 100000
+
+        config GY26_ENABLE
+            bool "Enable GY-26 compass (I2C)"
+            default n
+
+        config GY26_I2C_PORT
+            int "GY-26 I2C port number (0 or 1)"
+            default 1
+            depends on GY26_ENABLE
+
+        config GY26_I2C_SDA_PIN
+            int "GY-26 I2C SDA pin"
+            default 9
+            depends on GY26_ENABLE
+
+        config GY26_I2C_SCL_PIN
+            int "GY-26 I2C SCL pin"
+            default 10
+            depends on GY26_ENABLE
+
+        config GY26_I2C_FREQ_HZ
+            int "GY-26 I2C frequency"
+            default 100000
+            depends on GY26_ENABLE
+
+        config GY26_I2C_ADDRESS_7BIT
+            hex "GY-26 I2C 7-bit address"
+            default 0x70
+            depends on GY26_ENABLE
+            help
+                GY-26 vendor docs use 0xE0/0xE1 (8-bit). The equivalent 7-bit address is 0x70.
+
+        config GY26_MEASURE_DELAY_HEADING_MS
+            int "GY-26 heading measure delay (ms)"
+            default 60
+            depends on GY26_ENABLE
+
+        config GY26_MEASURE_DELAY_TEMP_MS
+            int "GY-26 temperature measure delay (ms)"
+            default 30
+            depends on GY26_ENABLE
     endmenu
 
     menu "MQTT Configuration"

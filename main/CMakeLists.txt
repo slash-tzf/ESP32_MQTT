@@ -5,6 +5,7 @@ set(SOURCES
     "4g/modem_4g.c"
     "rgb_led/led.c"
     "sensors/sensors.c"
+    "sensors/gy26.c"
     "data_manager/json_wrapper.c"
     "data_manager/data_model.c"
     "http_server/modem_http_config.c"
