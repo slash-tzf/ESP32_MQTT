@@ -8,6 +8,9 @@
 #include "nvs.h"
 static const char *TAG = "MQTT";
 
+// MQTT数据模型上报间隔(毫秒)
+#define MQTT_PUBLISH_INTERVAL_MS   5000
+
 #define MQTT_BROKER_URI         CONFIG_MQTT_BROKER_URI
 #define MQTT_BROKER_USERNAME    CONFIG_MQTT_BROKER_USERNAME
 #define MQTT_BROKER_PASSWORD    CONFIG_MQTT_BROKER_PASSWORD
@@ -81,8 +84,8 @@ static void data_publish_task(void *pvParameter)
             ESP_LOGI(TAG, "已发布完整数据模型到MQTT");
         }
         
-        // 每30秒发布一次完整数据
-        vTaskDelay(pdMS_TO_TICKS(30000));
+        // 每5秒发布一次完整数据
+        vTaskDelay(pdMS_TO_TICKS(MQTT_PUBLISH_INTERVAL_MS));
     }
 }
 

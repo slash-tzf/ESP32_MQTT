@@ -19,6 +19,36 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
+typedef enum {
+    WIFI_STA_STATE_UNKNOWN = 0,
+    WIFI_STA_STATE_CONNECTING,
+    WIFI_STA_STATE_CONNECTED,
+    WIFI_STA_STATE_ERROR,
+} wifi_sta_state_t;
+
+static int s_ap_sta_count = 0;
+static wifi_sta_state_t s_sta_state = WIFI_STA_STATE_UNKNOWN;
+
+static void wifi_led_update(void)
+{
+    if (s_ap_sta_count > 0) {
+        led_set_color(0, 0, 255);
+        return;
+    }
+
+    if (s_sta_state == WIFI_STA_STATE_CONNECTED) {
+        led_set_color(0, 128, 0);
+        return;
+    }
+
+    if (s_sta_state == WIFI_STA_STATE_ERROR) {
+        led_set_color(255, 0, 0);
+        return;
+    }
+
+    led_set_color(0, 0, 0);
+}
+
 // WiFi事件处理函数
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
@@ -27,23 +57,34 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_data;
         ESP_LOGI(TAG, "Station "MACSTR" joined, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        led_set_color(0, 0, 255);
+        s_ap_sta_count++;
+        wifi_led_update();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_data;
         ESP_LOGI(TAG, "Station "MACSTR" left, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        led_set_color(0, 0, 0);
+        if (s_ap_sta_count > 0) {
+            s_ap_sta_count--;
+        }
+        wifi_led_update();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        s_sta_state = WIFI_STA_STATE_CONNECTING;
         esp_wifi_connect();
+        wifi_led_update();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "连接断开，尝试重新连接...");
         esp_wifi_connect();
-        led_set_color(255, 0, 0);
+        s_sta_state = WIFI_STA_STATE_ERROR;
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        wifi_led_update();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
         ESP_LOGI(TAG, "获取IP地址:" IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        led_set_color(0,128,0);
+        xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        s_sta_state = WIFI_STA_STATE_CONNECTED;
+        wifi_led_update();
     }
 }
 

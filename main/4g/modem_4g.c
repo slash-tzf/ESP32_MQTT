@@ -9,6 +9,32 @@
 
 static const char *TAG = "MODEM_4G";
 
+static bool s_sim_present = true;
+static bool s_usb_connected = true;
+static bool s_modem_net_connected = false;
+static int s_modem_wifi_sta_count = 0;
+
+static void modem_led_update(void)
+{
+    if (!s_usb_connected) {
+        led_set_color(255, 255, 0);
+        return;
+    }
+    if (!s_sim_present) {
+        led_set_color(255, 0, 0);
+        return;
+    }
+    if (s_modem_wifi_sta_count > 0) {
+        led_set_color(0, 0, 255);
+        return;
+    }
+    if (s_modem_net_connected) {
+        led_set_color(0, 128, 0);
+        return;
+    }
+    led_set_color(0, 0, 0);
+}
+
 
 static void on_modem_event(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data)
@@ -18,52 +44,64 @@ static void on_modem_event(void *arg, esp_event_base_t event_base,
         if (event_id == MODEM_EVENT_SIMCARD_DISCONN)
         {
             ESP_LOGW(TAG, "Modem Board Event: SIM Card disconnected");
-            led_set_color(255, 0, 0);
+            s_sim_present = false;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_SIMCARD_CONN)
         {
             ESP_LOGI(TAG, "Modem Board Event: SIM Card Connected");
-            led_set_color(0, 0, 0);
+            s_sim_present = true;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_DTE_DISCONN)
         {
             ESP_LOGW(TAG, "Modem Board Event: USB disconnected");
-            led_set_color(255, 255, 0);
+            s_usb_connected = false;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_DTE_CONN)
         {
             ESP_LOGI(TAG, "Modem Board Event: USB connected");
-            led_set_color(0, 0, 0);
+            s_usb_connected = true;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_DTE_RESTART)
         {
             ESP_LOGW(TAG, "Modem Board Event: Hardware restart");
-            led_set_color(255, 255, 0);
+            s_usb_connected = false;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_DTE_RESTART_DONE)
         {
             ESP_LOGI(TAG, "Modem Board Event: Hardware restart done");
-            led_set_color(0, 0, 0);
+            s_usb_connected = true;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_NET_CONN)
         {
             ESP_LOGI(TAG, "Modem Board Event: Network connected");
-            led_set_color(0, 128, 0);
+            s_modem_net_connected = true;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_NET_DISCONN)
         {
             ESP_LOGW(TAG, "Modem Board Event: Network disconnected");
-            led_set_color(0, 128, 0);
+            s_modem_net_connected = false;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_WIFI_STA_CONN)
         {
             ESP_LOGI(TAG, "Modem Board Event: Station connected");
-            led_set_color(0, 0, 255);
+            s_modem_wifi_sta_count++;
+            modem_led_update();
         }
         else if (event_id == MODEM_EVENT_WIFI_STA_DISCONN)
         {
             ESP_LOGW(TAG, "Modem Board Event: All stations disconnected");
-            led_set_color(0, 0, 0);
+            if (s_modem_wifi_sta_count > 0) {
+                s_modem_wifi_sta_count--;
+            }
+            modem_led_update();
         }
     }
 }

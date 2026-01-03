@@ -21,7 +21,7 @@ static const char *TAG = "sensors";
 #define DHT11_GPIO_PIN              CONFIG_DHT11_GPIO_PIN       // DHT11数据引脚
 
 // 传感器数据更新间隔(毫秒)
-#define SENSOR_UPDATE_INTERVAL_MS   10000
+#define SENSOR_UPDATE_INTERVAL_MS   5000
 
 static bh1750_handle_t bh1750_dev = NULL;
 
