@@ -17,6 +17,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_netif.h"
+#include "esp_mac.h"
 #include "usbh_modem_wifi.h"
 #include "led.h"
 #include "mqtt.h"
@@ -54,6 +55,13 @@ void app_main(void)
     /* Initialize default TCP/IP stack */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Modify AP SSID with MAC address
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
+    snprintf(wifi_AP_config.ssid, sizeof(wifi_AP_config.ssid), "ESP32_%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    ESP_LOGI(TAG, "AP SSID modified to: %s", wifi_AP_config.ssid);
 
     // 初始化网络管理器
     ESP_ERROR_CHECK(network_manager_init());
