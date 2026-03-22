@@ -26,6 +26,7 @@
 #include "modem_http_config.h"
 #include "data_model.h"
 #include "network_manager.h"
+#include "wifi_manager.h"
 #include "mqtt.h"
 #include "cJSON.h"
 
@@ -1012,8 +1013,19 @@ static esp_err_t wifi_sta_post_handler(httpd_req_t *req)
     
     ESP_LOGI(TAG, "解析的WiFi配置 - SSID: %s", decoded_ssid);
     
-    // 保存配置并尝试连接
+    // 保存配置
     esp_err_t ret = network_manager_set_wifi_config(decoded_ssid, decoded_password);
+
+    // 收到配置后立即重连（包括AP-only场景）
+    if (ret == ESP_OK) {
+        esp_err_t conn_ret = wifi_connect_sta(decoded_ssid, decoded_password);
+        if (conn_ret != ESP_OK) {
+            ESP_LOGE(TAG, "触发立即重连失败: %s", esp_err_to_name(conn_ret));
+            ret = conn_ret;
+        } else {
+            ESP_LOGI(TAG, "已触发立即重连: SSID=%s", decoded_ssid);
+        }
+    }
     
     // 返回JSON结果
     httpd_resp_set_type(req, "application/json");

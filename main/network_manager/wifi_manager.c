@@ -6,6 +6,7 @@
 #include "esp_event.h"
 #include "freertos/event_groups.h"
 #include <string.h>
+#include <stdbool.h>
 #include "led.h"
 
 // 外部变量，用于从network_manager.c获取WiFi配置
@@ -18,6 +19,7 @@ static const char *TAG = "WIFI_MGR";
 static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+#define WIFI_STA_MAX_RETRY 5
 
 typedef enum {
     WIFI_STA_STATE_UNKNOWN = 0,
@@ -28,6 +30,7 @@ typedef enum {
 
 static int s_ap_sta_count = 0;
 static wifi_sta_state_t s_sta_state = WIFI_STA_STATE_UNKNOWN;
+static int s_sta_retry_count = 0;
 
 static void wifi_led_update(void)
 {
@@ -69,11 +72,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         wifi_led_update();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         s_sta_state = WIFI_STA_STATE_CONNECTING;
-        esp_wifi_connect();
+        s_sta_retry_count = 0;
+        if (wifi_ssid[0] != '\0') {
+            esp_wifi_connect();
+        }
         wifi_led_update();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "连接断开，尝试重新连接...");
-        esp_wifi_connect();
+        if (wifi_ssid[0] != '\0' && s_sta_retry_count < WIFI_STA_MAX_RETRY) {
+            s_sta_retry_count++;
+            ESP_LOGW(TAG, "连接断开，尝试重新连接...(%d/%d)", s_sta_retry_count, WIFI_STA_MAX_RETRY);
+            esp_wifi_connect();
+        } else {
+            ESP_LOGW(TAG, "STA连接失败，停止重连，仅保留SoftAP");
+        }
         s_sta_state = WIFI_STA_STATE_ERROR;
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -81,6 +92,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
         ESP_LOGI(TAG, "获取IP地址:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_sta_retry_count = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         s_sta_state = WIFI_STA_STATE_CONNECTED;
@@ -102,12 +114,13 @@ static esp_netif_t *wifi_init_softap(modem_wifi_config_t *wifi_AP_config)
 
     strncpy((char *)wifi_ap_config.ap.ssid, wifi_AP_config->ssid, sizeof(wifi_ap_config.ap.ssid));
     strncpy((char *)wifi_ap_config.ap.password, wifi_AP_config->password, sizeof(wifi_ap_config.ap.password));
+    wifi_ap_config.ap.channel = wifi_AP_config->channel;
     wifi_ap_config.ap.ssid_hidden = wifi_AP_config->ssid_hidden;
     
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_ap_config));
     ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_AP, wifi_AP_config->bandwidth));
 
-    ESP_LOGI(TAG, "WiFi SoftAP初始化完成. SSID:%s 密码:%s 信道:%zu",
+    ESP_LOGI(TAG, "WiFi SoftAP初始化完成. SSID:%s 密码:%s 信道:%d",
              wifi_AP_config->ssid, wifi_AP_config->password, wifi_AP_config->channel);
 
     return esp_netif_ap;
@@ -145,6 +158,7 @@ static esp_netif_t *wifi_init_sta(void)
 esp_err_t wifi_apsta_init(modem_wifi_config_t *wifi_AP_config)
 {
     s_wifi_event_group = xEventGroupCreate();
+    bool sta_connected = false;
 
     // 注册事件处理程序
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
@@ -184,9 +198,19 @@ esp_err_t wifi_apsta_init(modem_wifi_config_t *wifi_AP_config)
         
         if (bits & WIFI_CONNECTED_BIT) {
             ESP_LOGI(TAG, "已连接到AP SSID:%s", wifi_ssid);
+            sta_connected = true;
         } else {
             ESP_LOGW(TAG, "连接到AP失败. SSID:%s", wifi_ssid);
         }
+    } else {
+        ESP_LOGW(TAG, "未配置STA WiFi，进入仅SoftAP模式");
+    }
+
+    if (!sta_connected) {
+        ESP_ERROR_CHECK(esp_wifi_disconnect());
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+        ESP_LOGW(TAG, "已切换为仅SoftAP模式，等待手机连接AP进行配置");
+        return ESP_OK;
     }
     
     // 设置STA为默认接口
@@ -209,6 +233,13 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password)
     if (ssid == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    ESP_ERROR_CHECK(esp_wifi_get_mode(&mode));
+    if (mode == WIFI_MODE_AP) {
+        ESP_LOGI(TAG, "当前为AP-only，切换回APSTA后发起STA连接");
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    }
     
     wifi_config_t wifi_sta_config = {0};
     
@@ -221,6 +252,12 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password)
     wifi_sta_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
     wifi_sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_sta_config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+
+    s_sta_state = WIFI_STA_STATE_CONNECTING;
+    s_sta_retry_count = 0;
+    if (s_wifi_event_group != NULL) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    }
     
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_sta_config));
     ESP_ERROR_CHECK(esp_wifi_connect());
